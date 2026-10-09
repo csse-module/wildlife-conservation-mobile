@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
-import '../providers/auth_provider.dart';
 import '../services/api_service.dart';
 import 'package:provider/provider.dart';
 import '../providers/patrol_provider.dart';
@@ -22,7 +21,7 @@ class _MyPatrolsScreenState extends State<MyPatrolsScreen> {
   final ApiService _apiService = ApiService();
   bool _isLoading = true;
   List<dynamic> _assignments = [];
-  Map<String, List<LatLng>> _routesCache = {};
+  final Map<String, List<LatLng>> _routesCache = {};
 
   @override
   void initState() {
@@ -213,7 +212,7 @@ class _MyPatrolsScreenState extends State<MyPatrolsScreen> {
                                       activePatrolId != assignment['id'])
                                   ? null
                                   : () async {
-                                      final result = await Navigator.push(
+                                      await Navigator.push(
                                         context,
                                         MaterialPageRoute(
                                           builder: (context) =>

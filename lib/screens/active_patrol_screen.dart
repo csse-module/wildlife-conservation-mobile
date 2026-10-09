@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -7,8 +6,6 @@ import 'package:geolocator/geolocator.dart';
 import 'package:uuid/uuid.dart';
 import 'package:provider/provider.dart';
 import '../providers/patrol_provider.dart';
-import '../services/api_service.dart';
-import '../services/db_helper.dart';
 import '../utils/constants.dart';
 import '../features/operations/presentation/report_form_screen.dart';
 import '../features/operations/domain/models.dart';
@@ -58,8 +55,6 @@ class _ActivePatrolScreenState extends State<ActivePatrolScreen> {
 
   void _markWaypoint() async {
     final position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
-
-    final String waypointId = const Uuid().v4().toLowerCase();
     
     // Simple dialog to get a label
     String? label = await showDialog<String>(
@@ -88,7 +83,6 @@ class _ActivePatrolScreenState extends State<ActivePatrolScreen> {
 
   void _reportSighting() async {
     final position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
-    final String observationId = const Uuid().v4().toLowerCase();
     
     String? sightingDetails = await showDialog<String>(
       context: context,

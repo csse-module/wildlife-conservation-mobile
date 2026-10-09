@@ -15,7 +15,7 @@ class _RangersListScreenState extends State<RangersListScreen> {
   final ApiService _apiService = ApiService();
   bool _isLoading = true;
   List<dynamic> _rangers = [];
-  Set<String> _busyRangerIds = {};
+  final Set<String> _busyRangerIds = {};
 
   @override
   void initState() {

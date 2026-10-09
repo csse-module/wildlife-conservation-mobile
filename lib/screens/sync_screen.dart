@@ -39,7 +39,6 @@ class _SyncScreenState extends State<SyncScreen> {
         final id = task['id'];
         final method = task['method'];
         final url = task['url'];
-        final type = task['type'];
         final String bodyString = task['body'];
         final String? imagePath = task['imagePath'];
 

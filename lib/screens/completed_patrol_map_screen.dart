@@ -19,7 +19,7 @@ class _CompletedPatrolMapScreenState extends State<CompletedPatrolMapScreen> {
   bool _isLoading = true;
   
   List<LatLng> _trackPoints = [];
-  List<Marker> _markers = [];
+  final List<Marker> _markers = [];
 
   @override
   void initState() {
