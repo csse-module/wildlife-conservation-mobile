@@ -11,7 +11,7 @@ import 'active_patrol_screen.dart';
 import 'sync_screen.dart';
 
 class MyPatrolsScreen extends StatefulWidget {
-  const MyPatrolsScreen({Key? key}) : super(key: key);
+  const MyPatrolsScreen({super.key});
 
   @override
   State<MyPatrolsScreen> createState() => _MyPatrolsScreenState();

@@ -6,7 +6,7 @@ import '../services/db_helper.dart';
 import '../utils/constants.dart';
 
 class SyncScreen extends StatefulWidget {
-  const SyncScreen({Key? key}) : super(key: key);
+  const SyncScreen({super.key});
 
   @override
   State<SyncScreen> createState() => _SyncScreenState();

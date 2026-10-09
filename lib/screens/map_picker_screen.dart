@@ -4,7 +4,7 @@ import 'package:latlong2/latlong.dart';
 import '../utils/constants.dart';
 
 class MapPickerScreen extends StatefulWidget {
-  const MapPickerScreen({Key? key}) : super(key: key);
+  const MapPickerScreen({super.key});
 
   @override
   State<MapPickerScreen> createState() => _MapPickerScreenState();

@@ -8,7 +8,7 @@ class RangerDetailsScreen extends StatefulWidget {
   final String rangerId;
   final String rangerName;
 
-  const RangerDetailsScreen({Key? key, required this.rangerId, required this.rangerName}) : super(key: key);
+  const RangerDetailsScreen({super.key, required this.rangerId, required this.rangerName});
 
   @override
   State<RangerDetailsScreen> createState() => _RangerDetailsScreenState();

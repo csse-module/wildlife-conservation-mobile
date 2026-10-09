@@ -5,7 +5,7 @@ import '../utils/constants.dart';
 import 'ranger_details_screen.dart';
 
 class RangersListScreen extends StatefulWidget {
-  const RangersListScreen({Key? key}) : super(key: key);
+  const RangersListScreen({super.key});
 
   @override
   State<RangersListScreen> createState() => _RangersListScreenState();
@@ -84,7 +84,7 @@ class _RangersListScreenState extends State<RangersListScreen> {
                         trailing: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                           decoration: BoxDecoration(
-                            color: isBusy ? Colors.orange.withOpacity(0.1) : AppConstants.primaryGreen.withOpacity(0.1),
+                            color: isBusy ? Colors.orange.withValues(alpha: 0.1) : AppConstants.primaryGreen.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Text(

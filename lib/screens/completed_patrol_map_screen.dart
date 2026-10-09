@@ -8,7 +8,7 @@ import '../utils/constants.dart';
 class CompletedPatrolMapScreen extends StatefulWidget {
   final String patrolId;
 
-  const CompletedPatrolMapScreen({Key? key, required this.patrolId}) : super(key: key);
+  const CompletedPatrolMapScreen({super.key, required this.patrolId});
 
   @override
   State<CompletedPatrolMapScreen> createState() => _CompletedPatrolMapScreenState();
