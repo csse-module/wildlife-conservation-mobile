@@ -66,5 +66,15 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>WildGuard uses your location to record patrols and wildlife reports.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>WildGuard uses the camera to attach wildlife incident evidence.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>WildGuard lets you attach a selected photo to a wildlife report.</string>
+	<key>UIFileSharingEnabled</key>
+	<true/>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
 </dict>
 </plist>
