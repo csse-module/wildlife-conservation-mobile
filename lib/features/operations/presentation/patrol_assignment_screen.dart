@@ -49,6 +49,13 @@ class _PatrolAssignmentScreenState extends State<PatrolAssignmentScreen> {
     _start = _end = null;
   }
 
+  String _routeLabel(PatrolRouteOption route) {
+    final areaId = route.areaId;
+    return areaId == null || areaId.trim().isEmpty
+        ? route.name
+        : '${route.name} · $areaId';
+  }
+
   Future<void> _assign() async {
     if (_route == null || _ranger == null) return;
     _assignmentId ??= const Uuid().v4();
@@ -146,7 +153,7 @@ class _PatrolAssignmentScreenState extends State<PatrolAssignmentScreen> {
                             .map(
                               (route) => DropdownMenuItem(
                                 value: route.id,
-                                child: Text('${route.name} · ${route.areaId}'),
+                                child: Text(_routeLabel(route)),
                               ),
                             )
                             .toList(),

@@ -141,7 +141,8 @@ class CameraTrap {
 
 class PatrolRouteOption {
   const PatrolRouteOption(this.id, this.name, this.areaId);
-  final String id, name, areaId;
+  final String id, name;
+  final String? areaId;
 }
 
 class RangerOption {

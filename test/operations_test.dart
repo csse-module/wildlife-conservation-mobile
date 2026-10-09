@@ -164,16 +164,10 @@ class Scenario {
         }
         if (path == '/patrol-routes') {
           return success({
-            'items': [
-              {
-                'id': 'route-demo',
-                'name': 'Village patrol',
-                'areaId': 'area-b1',
-              },
-            ],
+            'items': patrolRoutes,
             'page': 0,
             'size': 100,
-            'totalItems': 1,
+            'totalItems': patrolRoutes.length,
           });
         }
         if (path == '/users') {
@@ -232,6 +226,9 @@ class Scenario {
   final reports = <Map<String, dynamic>>[fieldReport()];
   final submitted = <Map<String, dynamic>>[];
   final savedReports = <Map<String, dynamic>>[];
+  final patrolRoutes = <Map<String, dynamic>>[
+    {'id': 'route-demo', 'name': 'Village patrol', 'areaId': 'area-b1'},
+  ];
   final store = MemoryOutbox();
   late ApiService api;
   late ReportOutbox outbox;
@@ -402,6 +399,49 @@ void main() {
       scenario.outbox.dispose();
     },
   );
+
+  testWidgets('routes without an area still show rangers and can be assigned', (
+    tester,
+  ) async {
+    final scenario = Scenario('PARK_MANAGER');
+    scenario.patrolRoutes
+      ..clear()
+      ..addAll([
+        {'id': 'route-missing-area', 'name': 'Boundary patrol'},
+        {'id': 'route-null-area', 'name': 'Forest patrol', 'areaId': null},
+        {'id': 'route-blank-area', 'name': 'River patrol', 'areaId': ' '},
+      ]);
+    await tester.pumpWidget(scenario.app(const PatrolAssignmentScreen()));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.widgetWithText(DropdownButtonFormField<String>, 'Park'),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Yala National Park').last);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    await tester.tap(
+      find.widgetWithText(DropdownButtonFormField<String>, 'Patrol route'),
+    );
+    await tester.pumpAndSettle();
+    for (final name in ['Boundary patrol', 'Forest patrol', 'River patrol']) {
+      expect(find.text(name), findsWidgets);
+    }
+    await tester.tap(find.text('Boundary patrol').last);
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.widgetWithText(DropdownButtonFormField<String>, 'Ranger'),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Available ranger').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Assign patrol'));
+    await tester.pumpAndSettle();
+    expect(scenario.submitted.single['routeId'], 'route-missing-area');
+    expect(scenario.submitted.single['rangerId'], 'ranger-1');
+    await tester.pumpWidget(const SizedBox.shrink());
+    scenario.outbox.dispose();
+  });
 
   testWidgets('community sees reporting actions and no manager privileges', (
     tester,
