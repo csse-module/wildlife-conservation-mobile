@@ -4,7 +4,7 @@ import '../services/database_helper.dart';
 import '../utils/constants.dart';
 
 class PendingIncidentsScreen extends StatefulWidget {
-  const PendingIncidentsScreen({Key? key}) : super(key: key);
+  const PendingIncidentsScreen({super.key});
 
   @override
   State<PendingIncidentsScreen> createState() => _PendingIncidentsScreenState();

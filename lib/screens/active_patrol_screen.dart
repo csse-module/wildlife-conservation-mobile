@@ -14,10 +14,10 @@ class ActivePatrolScreen extends StatefulWidget {
   final List<LatLng> plannedRoute;
 
   const ActivePatrolScreen({
-    Key? key, 
+    super.key, 
     required this.assignmentId, 
     required this.plannedRoute
-  }) : super(key: key);
+  });
 
   @override
   State<ActivePatrolScreen> createState() => _ActivePatrolScreenState();
@@ -53,8 +53,10 @@ class _ActivePatrolScreenState extends State<ActivePatrolScreen> {
   }
 
   void _markWaypoint() async {
-    final position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+    final position = await Geolocator.getCurrentPosition(locationSettings: const LocationSettings(accuracy: LocationAccuracy.high));
     
+    if (!mounted) return;
+
     // Simple dialog to get a label
     String? label = await showDialog<String>(
       context: context,
@@ -74,6 +76,8 @@ class _ActivePatrolScreenState extends State<ActivePatrolScreen> {
       },
     );
     
+    if (!mounted) return;
+
     if (label != null && label.isNotEmpty) {
       Provider.of<PatrolProvider>(context, listen: false).markWaypoint(label, position);
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Waypoint marked!')));
@@ -81,8 +85,10 @@ class _ActivePatrolScreenState extends State<ActivePatrolScreen> {
   }
 
   void _reportSighting() async {
-    final position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+    final position = await Geolocator.getCurrentPosition(locationSettings: const LocationSettings(accuracy: LocationAccuracy.high));
     
+    if (!mounted) return;
+
     String? sightingDetails = await showDialog<String>(
       context: context,
       builder: (context) {
@@ -109,6 +115,8 @@ class _ActivePatrolScreenState extends State<ActivePatrolScreen> {
       },
     );
     
+    if (!mounted) return;
+
     if (sightingDetails != null && sightingDetails.isNotEmpty) {
       Provider.of<PatrolProvider>(context, listen: false).reportSighting(sightingDetails, position);
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sighting Reported Successfully!'), backgroundColor: AppConstants.primaryGreen));
@@ -169,7 +177,7 @@ class _ActivePatrolScreenState extends State<ActivePatrolScreen> {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: Colors.green.withOpacity(0.2),
+                  color: Colors.green.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Row(

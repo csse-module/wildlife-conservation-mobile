@@ -7,7 +7,7 @@ import 'login_screen.dart';
 class ChangePasswordScreen extends StatefulWidget {
   final bool isForced; // True if they are forced to change after login
 
-  const ChangePasswordScreen({Key? key, this.isForced = false}) : super(key: key);
+  const ChangePasswordScreen({super.key, this.isForced = false});
 
   @override
   State<ChangePasswordScreen> createState() => _ChangePasswordScreenState();
