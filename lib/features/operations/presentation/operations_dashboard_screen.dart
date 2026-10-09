@@ -239,8 +239,10 @@ class _OperationsDashboardScreenState extends State<OperationsDashboardScreen>
                     }),
                   ),
                 if (snapshot.data!.isEmpty)
-                  const Text(
-                    'No parks are assigned to this account. Contact your park manager.',
+                  Text(
+                    user.role == 'COMMUNITY_MEMBER'
+                        ? 'No reporting locations are available yet. Please try again later.'
+                        : 'No parks are assigned to this account. Contact your park manager.',
                   ),
                 const SizedBox(height: 16),
                 const OutboxBanner(),

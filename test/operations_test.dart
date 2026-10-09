@@ -38,7 +38,7 @@ User user(String role) => User(
   name: 'Demo ${role.toLowerCase()}',
   email: 'demo@example.test',
   role: role,
-  parkIds: ['park-yala'],
+  parkIds: role == 'COMMUNITY_MEMBER' ? [] : ['park-yala'],
 );
 
 class FixtureAuth extends AuthProvider {
