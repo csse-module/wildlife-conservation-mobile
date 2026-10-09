@@ -110,9 +110,8 @@ class _MyPatrolsScreenState extends State<MyPatrolsScreen> {
                 final assignment = _assignments[index];
                 final routeId = assignment['routeId'];
                 final points = _routesCache[routeId];
-                final date = DateTime.parse(
-                  assignment['scheduledStartAt'],
-                ).toLocal();
+                final startAtStr = assignment['scheduledStartAt'];
+                final date = startAtStr != null ? DateTime.parse(startAtStr).toLocal() : DateTime.now();
 
                 final activePatrolId = context
                     .watch<PatrolProvider>()

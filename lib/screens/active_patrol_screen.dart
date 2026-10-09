@@ -10,6 +10,8 @@ import '../providers/patrol_provider.dart';
 import '../services/api_service.dart';
 import '../services/db_helper.dart';
 import '../utils/constants.dart';
+import '../features/operations/presentation/report_form_screen.dart';
+import '../features/operations/domain/models.dart';
 
 class ActivePatrolScreen extends StatefulWidget {
   final String assignmentId;
@@ -27,6 +29,7 @@ class ActivePatrolScreen extends StatefulWidget {
 
 class _ActivePatrolScreenState extends State<ActivePatrolScreen> {
   bool _isLoading = false;
+  bool _isMapReady = false;
   final MapController _mapController = MapController();
 
   @override
@@ -134,10 +137,14 @@ class _ActivePatrolScreenState extends State<ActivePatrolScreen> {
   Widget build(BuildContext context) {
     return Consumer<PatrolProvider>(
       builder: (context, patrol, child) {
-        if (patrol.actualPath.isNotEmpty) {
+        if (patrol.actualPath.isNotEmpty && _isMapReady) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) {
-              _mapController.move(patrol.actualPath.last, 16.0);
+              try {
+                _mapController.move(patrol.actualPath.last, 16.0);
+              } catch (e) {
+                // Ignore map controller not ready exceptions
+              }
             }
           });
         }
@@ -149,6 +156,20 @@ class _ActivePatrolScreenState extends State<ActivePatrolScreen> {
         foregroundColor: Colors.black,
         elevation: 1,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.add_location_alt, color: AppConstants.primaryGreen),
+            tooltip: 'Report Incident',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const ReportFormScreen(
+                    kind: ReportKind.incident,
+                  ),
+                ),
+              );
+            },
+          ),
           Padding(
             padding: const EdgeInsets.only(right: 16.0),
             child: Center(
@@ -204,6 +225,13 @@ class _ActivePatrolScreenState extends State<ActivePatrolScreen> {
               options: MapOptions(
                 initialCenter: widget.plannedRoute.isNotEmpty ? widget.plannedRoute.first : const LatLng(7.8731, 80.7718),
                 initialZoom: 15,
+                onMapReady: () {
+                  if (mounted) {
+                    setState(() {
+                      _isMapReady = true;
+                    });
+                  }
+                },
               ),
               children: [
                 TileLayer(
