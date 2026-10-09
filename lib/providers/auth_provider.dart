@@ -1,159 +1,128 @@
 import 'dart:convert';
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user_model.dart';
+import '../services/api_exception.dart';
 import '../services/api_service.dart';
 
-class AuthProvider with ChangeNotifier {
-  final ApiService _apiService = ApiService();
+class AuthProvider extends ChangeNotifier {
+  AuthProvider({ApiService? api}) : _api = api ?? ApiService();
+  final ApiService _api;
   User? _user;
   bool _isLoading = false;
   String? _errorMessage;
-
   User? get user => _user;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
-
   bool get isAuthenticated => _user != null;
 
-  // Login Method
-  Future<bool> login(String email, String password) async {
-    _isLoading = true;
-    _errorMessage = null;
-    notifyListeners();
+  Future<bool> login(String email, String password) => _run(() async {
+    _user = null;
+    await _api.clearToken();
+    final data = await _api.postData('/auth/login', {
+      'email': email.trim(),
+      'password': password,
+    });
+    _user = User.fromJson(Map<String, dynamic>.from(data['user'] as Map));
+    await _api.saveToken(data['accessToken'] as String);
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setString('user_profile', jsonEncode(_user!.toJson()));
+  });
 
-    try {
-      final response = await _apiService.post('/auth/login', {
-        'email': email,
-        'password': password,
-      });
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        
-        // Backend returns StandardResponse<LoginResponseDTO>
-        // Check if data has the structure we expect based on standard response
-        // e.g. { "status": 200, "message": "Success", "data": { "accessToken": "...", "user": {...} } }
-        
-        // Handling the standard response wrapper (assuming typical structure)
-        final responseData = data['data'] ?? data;
-        
-        final String token = responseData['accessToken'];
-        final userData = responseData['user'];
-
-        await _apiService.saveToken(token);
-        _user = User.fromJson(userData);
-        
-        _isLoading = false;
-        notifyListeners();
-        return true;
-      } else {
-        // Handle error responses
-        final data = jsonDecode(response.body);
-        _errorMessage = data['message'] ?? 'Login failed. Please check your credentials.';
-        _isLoading = false;
-        notifyListeners();
-        return false;
-      }
-    } catch (e) {
-      _errorMessage = 'An error occurred. Please try again later.';
-      _isLoading = false;
-      notifyListeners();
-      return false;
-    }
-  }
-  // Register Method
   Future<bool> register({
     required String name,
     required String email,
     required String password,
     required String parkId,
-  }) async {
-    _isLoading = true;
-    _errorMessage = null;
-    notifyListeners();
+  }) => _run(() async {
+    await _api.postData('/auth/register', {
+      'name': name,
+      'email': email,
+      'password': password,
+      'parkId': parkId,
+    });
+  });
 
-    try {
-      final response = await _apiService.post('/auth/register', {
-        'name': name,
-        'email': email,
-        'password': password,
-        'parkId': parkId,
-      });
-
-      if (response.statusCode == 201 || response.statusCode == 200) {
-        // Success! Note: The API does NOT return a token on registration,
-        // so the user must log in manually after this succeeds.
-        _isLoading = false;
-        notifyListeners();
-        return true;
-      } else {
-        // Handle error
-        final data = jsonDecode(response.body);
-        if (data['error'] != null && data['error']['errorDescription'] != null) {
-          _errorMessage = data['error']['errorDescription'];
-          
-          // Append field errors if available
-          if (data['error']['fieldErrors'] != null) {
-            final Map<String, dynamic> fieldErrors = data['error']['fieldErrors'];
-            if (fieldErrors.isNotEmpty) {
-               _errorMessage = '$_errorMessage (${fieldErrors.values.first})';
-            }
-          }
-        } else {
-          _errorMessage = data['description'] ?? 'Registration failed.';
-        }
-        _isLoading = false;
-        notifyListeners();
-        return false;
-      }
-    } catch (e) {
-      _errorMessage = 'An error occurred during registration. Please try again.';
-      _isLoading = false;
-      notifyListeners();
-      return false;
-    }
-  }
-  // Change Password Method
-  Future<bool> changePassword(String currentPassword, String newPassword) async {
-    _isLoading = true;
-    _errorMessage = null;
-    notifyListeners();
-
-    try {
-      final response = await _apiService.post('/auth/change-password', {
-        'currentPassword': currentPassword,
-        'newPassword': newPassword,
-      });
-
-      if (response.statusCode == 200) {
-        // Success! API returns {"passwordChangeRequired":false,"reloginRequired":true}
-        // As per spec, we must clear the token and require login again.
+  Future<bool> changePassword(String currentPassword, String newPassword) =>
+      _run(() async {
+        await _api.postData('/auth/change-password', {
+          'currentPassword': currentPassword,
+          'newPassword': newPassword,
+        });
         await logout();
-        _isLoading = false;
-        notifyListeners();
-        return true;
-      } else {
-        final data = jsonDecode(response.body);
-        _errorMessage = data['description'] ?? 'Failed to change password.';
-        if (data['error'] != null && data['error']['errorDescription'] != null) {
-          _errorMessage = data['error']['errorDescription'];
-        }
-        _isLoading = false;
-        notifyListeners();
-        return false;
+      });
+
+  Future<void> restoreSession() async {
+    final preferences = await SharedPreferences.getInstance();
+    if (preferences.getString('jwt_token') == null) return;
+    try {
+      final data = await _api.getData('/auth/me');
+      _user = User.fromJson(Map<String, dynamic>.from(data as Map));
+      await preferences.setString('user_profile', jsonEncode(_user!.toJson()));
+    } on ApiException catch (error) {
+      if (!error.canRetry) {
+        await logout();
+        return;
       }
-    } catch (e) {
-      _errorMessage = 'An error occurred. Please try again later.';
+      // Cached identity permits offline capture only; the backend validates every synchronized request.
+      final cached = preferences.getString('user_profile');
+      final token = preferences.getString('jwt_token');
+      if (cached != null && token != null) {
+        try {
+          final payload =
+              jsonDecode(
+                    utf8.decode(
+                      base64Url.decode(
+                        base64Url.normalize(token.split('.')[1]),
+                      ),
+                    ),
+                  )
+                  as Map<String, dynamic>;
+          final profile = User.fromJson(
+            jsonDecode(cached) as Map<String, dynamic>,
+          );
+          if (payload['sub'] == profile.id &&
+              (payload['exp'] as num).toInt() >
+                  DateTime.now().millisecondsSinceEpoch ~/ 1000) {
+            _user = profile;
+          }
+        } catch (_) {
+          await logout();
+          return;
+        }
+      }
+    } catch (_) {
+      await logout();
+      return;
+    }
+    notifyListeners();
+  }
+
+  Future<bool> _run(Future<void> Function() operation) async {
+    if (_isLoading) return false;
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+    try {
+      await operation();
+      return true;
+    } on ApiException catch (error) {
+      _errorMessage = error.message;
+      return false;
+    } catch (_) {
+      _errorMessage = 'The operation could not be completed. Please retry.';
+      return false;
+    } finally {
       _isLoading = false;
       notifyListeners();
-      return false;
     }
   }
 
-  // Logout Method
   Future<void> logout() async {
-    await _apiService.clearToken();
     _user = null;
+    await _api.clearToken();
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.remove('user_profile');
     notifyListeners();
   }
 }

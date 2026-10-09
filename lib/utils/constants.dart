@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 
 class AppConstants {
-  // Replace with actual backend IP when running on emulator/device (e.g. 192.168.8.102 for physical device on same WiFi)
-  static const String baseUrl = 'http://192.168.8.102:8080/api/v1';
+  // Override API_BASE_URL for a different device or network.
+  static const String baseUrl = String.fromEnvironment('API_BASE_URL',
+      defaultValue: 'http://192.168.1.21:8080/api/v1');
 
   // Colors
   static const Color primaryGreen = Color(0xFF2E7D32); // Dark Green

@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../utils/constants.dart';
+import '../features/operations/domain/repositories.dart';
 
 class RegistrationScreen extends StatefulWidget {
-  const RegistrationScreen({Key? key}) : super(key: key);
+  const RegistrationScreen({super.key});
 
   @override
   State<RegistrationScreen> createState() => _RegistrationScreenState();
@@ -17,12 +18,41 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   final _confirmPasswordController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
 
-  String? _selectedParkId = 'park-wilpattu';
+  String? _selectedParkId;
+  List<Map<String, String>> _availableParks = [];
+  bool _loadingParks = true;
+  String? _parkError;
 
-  // For demonstration, hardcoding parks. In a real app, you would fetch these via GET /parks.
-  final List<Map<String, String>> _availableParks = [
-    {'id': 'park-wilpattu', 'name': 'Wilpattu National Park'},
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _loadParks();
+  }
+
+  Future<void> _loadParks() async {
+    setState(() {
+      _loadingParks = true;
+      _parkError = null;
+    });
+    try {
+      final parks = await context.read<ParkRepository>().registrationParks();
+      if (!mounted) return;
+      setState(() {
+        _availableParks = parks
+            .map((park) => {'id': park.id, 'name': park.name})
+            .toList();
+        _selectedParkId = parks.isEmpty ? null : parks.first.id;
+        if (parks.isEmpty) {
+          _parkError =
+              'Community registration is not enabled for any park. Contact the park manager.';
+        }
+      });
+    } catch (error) {
+      if (mounted) setState(() => _parkError = error.toString());
+    } finally {
+      if (mounted) setState(() => _loadingParks = false);
+    }
+  }
 
   @override
   void dispose() {
@@ -34,6 +64,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   }
 
   void _handleRegister() async {
+    if (_selectedParkId == null) return;
     if (_formKey.currentState!.validate()) {
       if (_passwordController.text != _confirmPasswordController.text) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -46,7 +77,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       }
 
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
-      
+
       final success = await authProvider.register(
         name: _nameController.text.trim(),
         email: _emailController.text.trim(),
@@ -83,7 +114,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     return Scaffold(
       backgroundColor: AppConstants.background,
       appBar: AppBar(
-        title: const Text('Create Account'),
+        title: const Text('Community Registration'),
         backgroundColor: AppConstants.primaryGreen,
         foregroundColor: AppConstants.white,
         elevation: 0,
@@ -124,16 +155,27 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                     keyboardType: TextInputType.name,
                     decoration: InputDecoration(
                       labelText: 'Full Name',
-                      prefixIcon: const Icon(Icons.person_outline, color: AppConstants.primaryGreen),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      prefixIcon: const Icon(
+                        Icons.person_outline,
+                        color: AppConstants.primaryGreen,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: AppConstants.primaryGreen, width: 2),
+                        borderSide: const BorderSide(
+                          color: AppConstants.primaryGreen,
+                          width: 2,
+                        ),
                       ),
                       filled: true,
                       fillColor: AppConstants.white,
                     ),
-                    validator: (value) => (value == null || value.trim().isEmpty) ? 'Please enter your name' : null,
+                    validator: (value) =>
+                        (value == null || value.trim().isEmpty)
+                        ? 'Please enter your name'
+                        : null,
                   ),
                   const SizedBox(height: 16),
 
@@ -143,18 +185,30 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                     keyboardType: TextInputType.emailAddress,
                     decoration: InputDecoration(
                       labelText: 'Email Address',
-                      prefixIcon: const Icon(Icons.email_outlined, color: AppConstants.primaryGreen),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      prefixIcon: const Icon(
+                        Icons.email_outlined,
+                        color: AppConstants.primaryGreen,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: AppConstants.primaryGreen, width: 2),
+                        borderSide: const BorderSide(
+                          color: AppConstants.primaryGreen,
+                          width: 2,
+                        ),
                       ),
                       filled: true,
                       fillColor: AppConstants.white,
                     ),
                     validator: (value) {
-                      if (value == null || value.isEmpty) return 'Please enter your email';
-                      if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
+                      if (value == null || value.isEmpty) {
+                        return 'Please enter your email';
+                      }
+                      if (!RegExp(
+                        r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
+                      ).hasMatch(value)) {
                         return 'Please enter a valid email';
                       }
                       return null;
@@ -164,14 +218,23 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
 
                   // Select Park Dropdown
                   DropdownButtonFormField<String>(
-                    value: _selectedParkId,
+                    key: ValueKey(_selectedParkId),
+                    initialValue: _selectedParkId,
                     decoration: InputDecoration(
                       labelText: 'Community Park',
-                      prefixIcon: const Icon(Icons.park_outlined, color: AppConstants.primaryGreen),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      prefixIcon: const Icon(
+                        Icons.park_outlined,
+                        color: AppConstants.primaryGreen,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: AppConstants.primaryGreen, width: 2),
+                        borderSide: const BorderSide(
+                          color: AppConstants.primaryGreen,
+                          width: 2,
+                        ),
                       ),
                       filled: true,
                       fillColor: AppConstants.white,
@@ -187,28 +250,52 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                         _selectedParkId = value;
                       });
                     },
-                    validator: (value) => value == null ? 'Please select a park' : null,
+                    validator: (value) =>
+                        value == null ? 'Please select a park' : null,
                   ),
                   const SizedBox(height: 16),
 
+                  if (_loadingParks) const LinearProgressIndicator(),
+                  if (_parkError != null) ...[
+                    Text(
+                      _parkError!,
+                      style: const TextStyle(color: Colors.red),
+                    ),
+                    TextButton(
+                      onPressed: _loadParks,
+                      child: const Text('Reload available parks'),
+                    ),
+                  ],
                   // Password Field
                   TextFormField(
                     controller: _passwordController,
                     obscureText: true,
                     decoration: InputDecoration(
                       labelText: 'Password',
-                      prefixIcon: const Icon(Icons.lock_outline, color: AppConstants.primaryGreen),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      prefixIcon: const Icon(
+                        Icons.lock_outline,
+                        color: AppConstants.primaryGreen,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: AppConstants.primaryGreen, width: 2),
+                        borderSide: const BorderSide(
+                          color: AppConstants.primaryGreen,
+                          width: 2,
+                        ),
                       ),
                       filled: true,
                       fillColor: AppConstants.white,
                     ),
                     validator: (value) {
-                      if (value == null || value.isEmpty) return 'Please enter a password';
-                      if (value.length < 6) return 'Password must be at least 6 characters';
+                      if (value == null || value.isEmpty) {
+                        return 'Please enter a password';
+                      }
+                      if (value.length < 6) {
+                        return 'Password must be at least 6 characters';
+                      }
                       return null;
                     },
                   ),
@@ -220,18 +307,30 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                     obscureText: true,
                     decoration: InputDecoration(
                       labelText: 'Confirm Password',
-                      prefixIcon: const Icon(Icons.lock_reset_outlined, color: AppConstants.primaryGreen),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      prefixIcon: const Icon(
+                        Icons.lock_reset_outlined,
+                        color: AppConstants.primaryGreen,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: AppConstants.primaryGreen, width: 2),
+                        borderSide: const BorderSide(
+                          color: AppConstants.primaryGreen,
+                          width: 2,
+                        ),
                       ),
                       filled: true,
                       fillColor: AppConstants.white,
                     ),
                     validator: (value) {
-                      if (value == null || value.isEmpty) return 'Please confirm your password';
-                      if (value != _passwordController.text) return 'Passwords do not match';
+                      if (value == null || value.isEmpty) {
+                        return 'Please confirm your password';
+                      }
+                      if (value != _passwordController.text) {
+                        return 'Passwords do not match';
+                      }
                       return null;
                     },
                   ),
@@ -239,7 +338,12 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
 
                   // Register Button
                   ElevatedButton(
-                    onPressed: authProvider.isLoading ? null : _handleRegister,
+                    onPressed:
+                        authProvider.isLoading ||
+                            _loadingParks ||
+                            _selectedParkId == null
+                        ? null
+                        : _handleRegister,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppConstants.primaryGreen,
                       foregroundColor: AppConstants.white,
@@ -268,7 +372,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                           ),
                   ),
                   const SizedBox(height: 16),
-                  
+
                   // Back to Login Button
                   TextButton(
                     onPressed: () {

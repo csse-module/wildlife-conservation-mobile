@@ -1,10 +1,10 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../utils/constants.dart';
 import 'home_screen.dart';
 import 'login_screen.dart';
+import 'change_password_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({Key? key}) : super(key: key);
@@ -35,18 +35,18 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
 
     _animationController.forward();
     
-    Timer(const Duration(seconds: 3), () {
-      _checkAuthAndNavigate();
-    });
+    _checkAuthAndNavigate();
   }
 
-  void _checkAuthAndNavigate() {
+  Future<void> _checkAuthAndNavigate() async {
     // Basic navigation logic; adjust if relying on stored token logic in future
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    await authProvider.restoreSession();
+    if (!mounted) return;
     if (authProvider.isAuthenticated) {
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (context) => const HomeScreen()),
+        MaterialPageRoute(builder: (context) => authProvider.user!.passwordChangeRequired ? const ChangePasswordScreen(isForced: true) : const HomeScreen()),
       );
     } else {
       Navigator.pushReplacement(

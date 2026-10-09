@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import '../providers/auth_provider.dart';
@@ -8,6 +9,7 @@ import 'package:provider/provider.dart';
 import '../providers/patrol_provider.dart';
 import '../utils/constants.dart';
 import 'active_patrol_screen.dart';
+import 'sync_screen.dart';
 
 class MyPatrolsScreen extends StatefulWidget {
   const MyPatrolsScreen({Key? key}) : super(key: key);
@@ -38,7 +40,7 @@ class _MyPatrolsScreenState extends State<MyPatrolsScreen> {
         setState(() {
           _assignments = items;
         });
-        
+
         // Fetch route details for each assignment
         for (var assignment in _assignments) {
           final routeId = assignment['routeId'];
@@ -85,115 +87,178 @@ class _MyPatrolsScreenState extends State<MyPatrolsScreen> {
         title: const Text('My Assigned Patrols'),
         backgroundColor: AppConstants.primaryGreen,
         foregroundColor: Colors.white,
+        actions: [
+          if (!kIsWeb)
+            IconButton(
+              tooltip: 'Sync saved patrols',
+              icon: const Icon(Icons.cloud_upload_outlined),
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const SyncScreen()),
+              ),
+            ),
+        ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _assignments.isEmpty
-              ? const Center(child: Text('No assigned patrols at this time.'))
-              : ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: _assignments.length,
-                  itemBuilder: (context, index) {
-                    final assignment = _assignments[index];
-                    final routeId = assignment['routeId'];
-                    final points = _routesCache[routeId];
-                    final date = DateTime.parse(assignment['scheduledStartAt']).toLocal();
+          ? const Center(child: Text('No assigned patrols at this time.'))
+          : ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: _assignments.length,
+              itemBuilder: (context, index) {
+                final assignment = _assignments[index];
+                final routeId = assignment['routeId'];
+                final points = _routesCache[routeId];
+                final date = DateTime.parse(
+                  assignment['scheduledStartAt'],
+                ).toLocal();
 
-                    final activePatrolId = context.watch<PatrolProvider>().activeAssignmentId;
+                final activePatrolId = context
+                    .watch<PatrolProvider>()
+                    .activeAssignmentId;
 
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 16),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      child: Column(
-                        children: [
-                          Container(
-                            height: 200,
-                            decoration: BoxDecoration(
-                              borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-                              color: Colors.grey[200],
-                            ),
-                            child: points == null
-                                ? const Center(child: CircularProgressIndicator())
-                                : points.isEmpty
-                                    ? const Center(child: Text('Route has no coordinates'))
-                                    : ClipRRect(
-                                        borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-                                        child: FlutterMap(
-                                          options: MapOptions(
-                                            initialCenter: points.first,
-                                            initialZoom: 15,
-                                            interactionOptions: const InteractionOptions(flags: InteractiveFlag.none),
-                                          ),
-                                          children: [
-                                            TileLayer(
-                                              urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                                              userAgentPackageName: 'com.example.wildlife_conservation_mobile',
-                                            ),
-                                            if (points.length == 1)
-                                              MarkerLayer(
-                                                markers: [
-                                                  Marker(
-                                                    point: points.first,
-                                                    child: const Icon(Icons.location_pin, color: Colors.red, size: 40),
-                                                  ),
-                                                ],
-                                              )
-                                            else
-                                              PolylineLayer(
-                                                polylines: [
-                                                  Polyline(points: points, color: Colors.blue, strokeWidth: 4.0),
-                                                ],
-                                              ),
-                                          ],
-                                        ),
-                                      ),
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(
+                    children: [
+                      Container(
+                        height: 200,
+                        decoration: BoxDecoration(
+                          borderRadius: const BorderRadius.vertical(
+                            top: Radius.circular(12),
                           ),
-                          Padding(
-                            padding: const EdgeInsets.all(16.0),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                Row(
+                          color: Colors.grey[200],
+                        ),
+                        child: points == null
+                            ? const Center(child: CircularProgressIndicator())
+                            : points.isEmpty
+                            ? const Center(
+                                child: Text('Route has no coordinates'),
+                              )
+                            : ClipRRect(
+                                borderRadius: const BorderRadius.vertical(
+                                  top: Radius.circular(12),
+                                ),
+                                child: FlutterMap(
+                                  options: MapOptions(
+                                    initialCenter: points.first,
+                                    initialZoom: 15,
+                                    interactionOptions:
+                                        const InteractionOptions(
+                                          flags: InteractiveFlag.none,
+                                        ),
+                                  ),
                                   children: [
-                                    const Icon(Icons.calendar_today, size: 16, color: Colors.grey),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      'Scheduled: ${date.day}/${date.month}/${date.year} ${date.hour}:${date.minute.toString().padLeft(2, '0')}',
-                                      style: const TextStyle(fontWeight: FontWeight.bold),
+                                    TileLayer(
+                                      urlTemplate:
+                                          'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                                      userAgentPackageName:
+                                          'com.example.wildlife_conservation_mobile',
                                     ),
+                                    if (points.length == 1)
+                                      MarkerLayer(
+                                        markers: [
+                                          Marker(
+                                            point: points.first,
+                                            child: const Icon(
+                                              Icons.location_pin,
+                                              color: Colors.red,
+                                              size: 40,
+                                            ),
+                                          ),
+                                        ],
+                                      )
+                                    else
+                                      PolylineLayer(
+                                        polylines: [
+                                          Polyline(
+                                            points: points,
+                                            color: Colors.blue,
+                                            strokeWidth: 4.0,
+                                          ),
+                                        ],
+                                      ),
                                   ],
                                 ),
-                                const SizedBox(height: 16),
-                                ElevatedButton(
-                                  onPressed: (activePatrolId != null && activePatrolId != assignment['id']) ? null : () async {
-                                    final result = await Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (context) => ActivePatrolScreen(
-                                          assignmentId: assignment['id'],
-                                          plannedRoute: points ?? [],
-                                        ),
-                                      ),
-                                    );
-                                    // Refresh list when returned
-                                    _fetchAssignments();
-                                  },
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: (activePatrolId != null && activePatrolId != assignment['id']) ? Colors.grey : AppConstants.primaryGreen,
-                                    foregroundColor: Colors.white,
-                                    padding: const EdgeInsets.symmetric(vertical: 14),
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Row(
+                              children: [
+                                const Icon(
+                                  Icons.calendar_today,
+                                  size: 16,
+                                  color: Colors.grey,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Scheduled: ${date.day}/${date.month}/${date.year} ${date.hour}:${date.minute.toString().padLeft(2, '0')}',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
                                   ),
-                                  child: Text(activePatrolId == assignment['id'] ? 'Resume Patrol' : 'Confirm & Start', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                                 ),
                               ],
                             ),
-                          ),
-                        ],
+                            const SizedBox(height: 16),
+                            ElevatedButton(
+                              onPressed:
+                                  (activePatrolId != null &&
+                                      activePatrolId != assignment['id'])
+                                  ? null
+                                  : () async {
+                                      final result = await Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) =>
+                                              ActivePatrolScreen(
+                                                assignmentId: assignment['id'],
+                                                plannedRoute: points ?? [],
+                                              ),
+                                        ),
+                                      );
+                                      // Refresh list when returned
+                                      _fetchAssignments();
+                                    },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor:
+                                    (activePatrolId != null &&
+                                        activePatrolId != assignment['id'])
+                                    ? Colors.grey
+                                    : AppConstants.primaryGreen,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 14,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                              child: Text(
+                                activePatrolId == assignment['id']
+                                    ? 'Resume Patrol'
+                                    : 'Confirm & Start',
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    );
-                  },
-                ),
+                    ],
+                  ),
+                );
+              },
+            ),
     );
   }
 }

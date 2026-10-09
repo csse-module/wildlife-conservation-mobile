@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/admin_provider.dart';
 import '../utils/constants.dart';
+import '../features/operations/domain/models.dart';
+import '../features/operations/domain/repositories.dart';
 
 class AddStaffScreen extends StatefulWidget {
-  const AddStaffScreen({Key? key}) : super(key: key);
+  const AddStaffScreen({super.key});
 
   @override
   State<AddStaffScreen> createState() => _AddStaffScreenState();
@@ -17,6 +19,14 @@ class _AddStaffScreenState extends State<AddStaffScreen> {
   final _formKey = GlobalKey<FormState>();
 
   String _selectedRole = 'RANGER';
+  String? _selectedParkId;
+  late Future<List<ParkInfo>> _parks;
+  @override
+  void initState() {
+    super.initState();
+    _parks = context.read<ParkRepository>().list();
+  }
+
   final List<Map<String, String>> _roles = [
     {'value': 'RANGER', 'label': 'Ranger'},
     {'value': 'LIAISON_OFFICER', 'label': 'Liaison Officer'},
@@ -32,6 +42,12 @@ class _AddStaffScreenState extends State<AddStaffScreen> {
   }
 
   void _handleAddStaff() async {
+    if (_selectedParkId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Select a park for this staff member.')),
+      );
+      return;
+    }
     if (_formKey.currentState!.validate()) {
       final adminProvider = Provider.of<AdminProvider>(context, listen: false);
 
@@ -40,6 +56,7 @@ class _AddStaffScreenState extends State<AddStaffScreen> {
         email: _emailController.text.trim(),
         temporaryPassword: _passwordController.text,
         role: _selectedRole,
+        parkIds: [_selectedParkId!],
       );
 
       if (success) {
@@ -92,17 +109,63 @@ class _AddStaffScreenState extends State<AddStaffScreen> {
                 ),
                 const SizedBox(height: 16),
 
+                FutureBuilder<List<ParkInfo>>(
+                  future: _parks,
+                  builder: (context, snapshot) {
+                    if (snapshot.hasError) {
+                      return Column(
+                        children: [
+                          Text(snapshot.error.toString()),
+                          TextButton(
+                            onPressed: () => setState(() {
+                              _parks = context.read<ParkRepository>().list();
+                            }),
+                            child: const Text('Retry parks'),
+                          ),
+                        ],
+                      );
+                    }
+                    if (!snapshot.hasData) {
+                      return const LinearProgressIndicator();
+                    }
+                    return DropdownButtonFormField<String>(
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Assigned park',
+                      ),
+                      items: snapshot.data!
+                          .map(
+                            (park) => DropdownMenuItem(
+                              value: park.id,
+                              child: Text(park.name),
+                            ),
+                          )
+                          .toList(),
+                      validator: (value) =>
+                          value == null ? 'Select a park' : null,
+                      onChanged: (value) =>
+                          setState(() => _selectedParkId = value),
+                    );
+                  },
+                ),
+                const SizedBox(height: 16),
                 // Full Name
                 TextFormField(
                   controller: _nameController,
                   decoration: InputDecoration(
                     labelText: 'Full Name',
-                    prefixIcon: const Icon(Icons.person_outline, color: AppConstants.primaryGreen),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    prefixIcon: const Icon(
+                      Icons.person_outline,
+                      color: AppConstants.primaryGreen,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                     filled: true,
                     fillColor: Colors.white,
                   ),
-                  validator: (value) => value == null || value.isEmpty ? 'Required' : null,
+                  validator: (value) =>
+                      value == null || value.isEmpty ? 'Required' : null,
                 ),
                 const SizedBox(height: 16),
 
@@ -112,14 +175,21 @@ class _AddStaffScreenState extends State<AddStaffScreen> {
                   keyboardType: TextInputType.emailAddress,
                   decoration: InputDecoration(
                     labelText: 'Email Address',
-                    prefixIcon: const Icon(Icons.email_outlined, color: AppConstants.primaryGreen),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    prefixIcon: const Icon(
+                      Icons.email_outlined,
+                      color: AppConstants.primaryGreen,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                     filled: true,
                     fillColor: Colors.white,
                   ),
                   validator: (value) {
                     if (value == null || value.isEmpty) return 'Required';
-                    if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
+                    if (!RegExp(
+                      r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
+                    ).hasMatch(value)) {
                       return 'Invalid email';
                     }
                     return null;
@@ -129,11 +199,16 @@ class _AddStaffScreenState extends State<AddStaffScreen> {
 
                 // Role Dropdown
                 DropdownButtonFormField<String>(
-                  value: _selectedRole,
+                  initialValue: _selectedRole,
                   decoration: InputDecoration(
                     labelText: 'Role',
-                    prefixIcon: const Icon(Icons.badge_outlined, color: AppConstants.primaryGreen),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    prefixIcon: const Icon(
+                      Icons.badge_outlined,
+                      color: AppConstants.primaryGreen,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                     filled: true,
                     fillColor: Colors.white,
                   ),
@@ -154,15 +229,23 @@ class _AddStaffScreenState extends State<AddStaffScreen> {
                   obscureText: true,
                   decoration: InputDecoration(
                     labelText: 'Temporary Password',
-                    prefixIcon: const Icon(Icons.lock_outline, color: AppConstants.primaryGreen),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    prefixIcon: const Icon(
+                      Icons.lock_outline,
+                      color: AppConstants.primaryGreen,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                     filled: true,
                     fillColor: Colors.white,
-                    helperText: 'Staff will be forced to change this on first login.',
+                    helperText:
+                        'Staff will be forced to change this on first login.',
                   ),
                   validator: (value) {
                     if (value == null || value.isEmpty) return 'Required';
-                    if (value.length < 6) return 'Must be at least 6 characters';
+                    if (value.length < 6) {
+                      return 'Must be at least 6 characters';
+                    }
                     return null;
                   },
                 ),
@@ -182,11 +265,17 @@ class _AddStaffScreenState extends State<AddStaffScreen> {
                       ? const SizedBox(
                           height: 24,
                           width: 24,
-                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
                         )
                       : const Text(
                           'CREATE STAFF ACCOUNT',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                 ),
               ],
