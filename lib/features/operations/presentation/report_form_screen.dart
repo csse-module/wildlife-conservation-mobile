@@ -261,9 +261,11 @@ class _ReportFormScreenState extends State<ReportFormScreen> {
         }
         final parks = snapshot.data!;
         if (parks.isEmpty) {
-          return const Center(
+          return Center(
             child: Text(
-              'No parks are assigned to your account. Contact your park manager.',
+              _community
+                  ? 'No reporting locations are available yet. Please try again later.'
+                  : 'No parks are assigned to your account. Contact your park manager.',
             ),
           );
         }
@@ -276,7 +278,7 @@ class _ReportFormScreenState extends State<ReportFormScreen> {
               children: [
                 Text(
                   _community
-                      ? 'Help officers respond to wildlife sightings and crop damage near your village.'
+                      ? 'Report wildlife sightings or crop damage near your village. Choose the nearest park and area so officers can respond. You do not need a park assignment.'
                       : 'Record evidence with a photo, location and description.',
                 ),
                 const SizedBox(height: 20),

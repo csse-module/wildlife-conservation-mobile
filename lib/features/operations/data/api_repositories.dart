@@ -36,7 +36,7 @@ class ApiPatrolManagementRepository implements PatrolManagementRepository {
             (row) => PatrolRouteOption(
               row['id'] as String,
               row['name'] as String,
-              row['areaId'] as String,
+              row['areaId'] as String?,
             ),
           )
           .toList();
