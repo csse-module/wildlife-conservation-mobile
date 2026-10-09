@@ -3,11 +3,9 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
-import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:uuid/uuid.dart';
-import '../utils/constants.dart';
 import '../services/db_helper.dart';
 import '../services/api_service.dart';
 import 'auth_provider.dart';
@@ -73,8 +71,10 @@ class IncidentProvider with ChangeNotifier {
     try {
       // High accuracy can be slow/fail if signal is weak, we try briefly
       return await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-        timeLimit: const Duration(seconds: 10),
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: 10),
+        ),
       );
     } catch (e) {
       // If signal is weak, fallback to manual or last known
