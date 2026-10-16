@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../providers/auth_provider.dart';
+import '../../../providers/patrol_provider.dart';
 import '../../../screens/add_park_screen.dart';
 import '../../../screens/add_staff_screen.dart';
 import '../../../screens/assign_patrol_screen.dart';
@@ -33,6 +34,7 @@ class _OperationsDashboardScreenState extends State<OperationsDashboardScreen>
   Future<ResultPage<FieldReport>>? _feed, _pending;
   Future<ResultPage<AlertInfo>>? _alerts;
   Future<ConservationAnalytics>? _analytics;
+  Future<List<RangerOption>>? _rangers;
   String? _parkId;
   Timer? _timer;
   @override
@@ -94,6 +96,7 @@ class _OperationsDashboardScreenState extends State<OperationsDashboardScreen>
           now.subtract(const Duration(days: 29)),
           now,
         );
+        _rangers = context.read<PatrolManagementRepository>().rangers(_parkId!);
       }
     }
   }
@@ -180,6 +183,7 @@ class _OperationsDashboardScreenState extends State<OperationsDashboardScreen>
               );
               return;
             }
+            await context.read<PatrolProvider>().clearState();
             await context.read<AuthProvider>().logout();
             if (!context.mounted) return;
             Navigator.pushAndRemoveUntil(
@@ -284,6 +288,34 @@ class _OperationsDashboardScreenState extends State<OperationsDashboardScreen>
                                           ? 'Unavailable'
                                           : data.hasData
                                           ? '${data.data!.totalItems}'
+                                          : '...',
+                                      style: Theme.of(
+                                        context,
+                                      ).textTheme.headlineSmall,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      if (_rangers != null)
+                        SizedBox(
+                          width: 210,
+                          child: Card(
+                            child: Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: FutureBuilder<List<RangerOption>>(
+                                future: _rangers,
+                                builder: (context, data) => Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text('Active Rangers'),
+                                    Text(
+                                      data.hasError
+                                          ? 'Unavailable'
+                                          : data.hasData
+                                          ? '${data.data!.length}'
                                           : '...',
                                       style: Theme.of(
                                         context,
@@ -455,20 +487,56 @@ class _OperationsDashboardScreenState extends State<OperationsDashboardScreen>
             ...data.data!.items
                 .take(5)
                 .map(
-                  (report) => FieldReportTile(
-                    report: report,
-                    onTap: () async {
-                      await Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => FieldReportDetailScreen(
-                            id: report.id,
-                            kind: ReportKind.community,
+                  (report) => Card(
+                    margin: const EdgeInsets.symmetric(vertical: 4),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Column(
+                        children: [
+                          FieldReportTile(
+                            report: report,
+                            onTap: () async {
+                              await Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => FieldReportDetailScreen(
+                                    id: report.id,
+                                    kind: ReportKind.community,
+                                  ),
+                                ),
+                              );
+                              if (mounted) setState(_load);
+                            },
                           ),
-                        ),
-                      );
-                      if (mounted) setState(_load);
-                    },
+                          if (role == 'PARK_MANAGER')
+                            Padding(
+                              padding: const EdgeInsets.only(right: 12, bottom: 6),
+                              child: Align(
+                                alignment: Alignment.centerRight,
+                                child: FilledButton.tonalIcon(
+                                  icon: const Icon(Icons.add_alert, size: 18),
+                                  label: const Text('Create Alert'),
+                                  onPressed: () async {
+                                    await Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => CreateAlertScreen(
+                                          initialParkId: report.parkId,
+                                          initialAreaId: report.areaId,
+                                          initialAnimal: report.species ?? readable(report.type),
+                                          initialLatitude: report.latitude,
+                                          initialLongitude: report.longitude,
+                                        ),
+                                      ),
+                                    );
+                                    if (mounted) setState(_load);
+                                  },
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
             TextButton(

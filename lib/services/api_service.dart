@@ -17,6 +17,84 @@ class ApiService {
   final String _baseUrl;
   static const _timeout = Duration(seconds: 25);
 
+  static String? customBaseUrl;
+
+  static List<String> get candidateUrls => [
+        AppConstants.usbDebugBaseUrl,
+        AppConstants.currentLanBaseUrl,
+        AppConstants.localBaseUrl,
+        AppConstants.localhostBaseUrl,
+        AppConstants.deployedBaseUrl,
+      ];
+
+  static Future<void> initCustomBaseUrl([http.Client? probeClient]) async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getString('custom_base_url');
+    if (saved != null && saved.isNotEmpty) {
+      customBaseUrl = saved;
+      return;
+    }
+
+    // Auto-detect reachable server among candidate URLs
+    final client = probeClient ?? http.Client();
+    try {
+      for (final candidate in candidateUrls) {
+        try {
+          final res = await client
+              .get(Uri.parse('$candidate/auth/registration-parks'))
+              .timeout(const Duration(milliseconds: 1500));
+          if (res.statusCode >= 200 && res.statusCode < 500) {
+            customBaseUrl = candidate;
+            break;
+          }
+        } catch (_) {
+          continue;
+        }
+      }
+    } finally {
+      if (probeClient == null) {
+        client.close();
+      }
+    }
+  }
+
+  static Future<void> setCustomBaseUrl(String url) async {
+    customBaseUrl = url.trim();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('custom_base_url', customBaseUrl!);
+  }
+
+  String get baseUrl => customBaseUrl ?? _baseUrl;
+
+  Future<String?> autoDiscoverWorkingUrl() async {
+    for (final candidate in candidateUrls) {
+      if (candidate == baseUrl) continue;
+      try {
+        final res = await _client
+            .get(Uri.parse('$candidate/auth/registration-parks'))
+            .timeout(const Duration(milliseconds: 1500));
+        if (res.statusCode >= 200 && res.statusCode < 500) {
+          return candidate;
+        }
+      } catch (_) {
+        continue;
+      }
+    }
+    return null;
+  }
+
+  Future<bool> testConnection([String? targetUrl]) async {
+    final target = targetUrl?.trim() ?? baseUrl;
+    try {
+      final response = await _client
+          .get(Uri.parse('$target/auth/registration-parks'))
+          .timeout(const Duration(seconds: 4));
+      return response.statusCode >= 200 && response.statusCode < 500;
+    } catch (_) {
+      return false;
+    }
+  }
+
   // Method to get JWT Token
   Future<String?> _getToken() async {
     final prefs = await SharedPreferences.getInstance();
@@ -50,7 +128,7 @@ class ApiService {
 
     final response = await _client
         .post(
-          Uri.parse('$_baseUrl$endpoint'),
+          Uri.parse('$baseUrl$endpoint'),
           headers: headers,
           body: jsonEncode(body),
         )
@@ -70,7 +148,7 @@ class ApiService {
 
     final response = await _client
         .put(
-          Uri.parse('$_baseUrl$endpoint'),
+          Uri.parse('$baseUrl$endpoint'),
           headers: headers,
           body: jsonEncode(body),
         )
@@ -90,7 +168,7 @@ class ApiService {
     };
 
     final response = await _client
-        .get(Uri.parse('$_baseUrl$endpoint'), headers: headers)
+        .get(Uri.parse('$baseUrl$endpoint'), headers: headers)
         .timeout(_timeout);
 
     return response;
@@ -104,7 +182,7 @@ class ApiService {
     final token = await _getToken();
     final request = http.MultipartRequest(
       'PUT',
-      Uri.parse('$_baseUrl$endpoint'),
+      Uri.parse('$baseUrl$endpoint'),
     );
 
     if (token != null) {
@@ -155,7 +233,7 @@ class ApiService {
     try {
       final token = await _getToken();
       final request =
-          http.MultipartRequest('PUT', Uri.parse('$_baseUrl/media/$id'))
+          http.MultipartRequest('PUT', Uri.parse('$baseUrl/media/$id'))
             ..fields.addAll({'parkId': parkId, 'category': category})
             ..headers['X-Request-ID'] = const Uuid().v4()
             ..files.add(
@@ -216,6 +294,20 @@ class ApiService {
         'The server took too long to respond. Please retry.',
       );
     } on http.ClientException {
+      try {
+        final alternate = await autoDiscoverWorkingUrl();
+        if (alternate != null && alternate != baseUrl) {
+          customBaseUrl = alternate;
+          final retryResponse = await request();
+          if (retryResponse.statusCode >= 200 && retryResponse.statusCode < 300) {
+            final envelope =
+                jsonDecode(utf8.decode(retryResponse.bodyBytes)) as Map<String, dynamic>;
+            if (envelope['status'] == '00') return envelope['data'];
+          }
+        }
+      } catch (_) {
+        // Fall through to standard exception
+      }
       throw const ApiException(
         'Cannot reach the server. Check your connection.',
       );

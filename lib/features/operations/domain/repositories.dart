@@ -59,7 +59,14 @@ abstract interface class AlertRepository {
   Future<AlertInfo> accept(String id);
   Future<void> decline(String id, String reason);
   Future<void> support(String id, String reason);
-  Future<AlertInfo> resolve(String id, String actionTaken, String result);
+  Future<AlertInfo> resolve(
+    String id,
+    String actionTaken,
+    String result, {
+    String? notes,
+    List<String> photoIds = const [],
+  });
+  Future<Uint8List> photo(String id);
   Future<void> create(String id, Map<String, dynamic> payload);
 }
 

@@ -11,15 +11,20 @@ import '../utils/constants.dart';
 import '../features/operations/presentation/report_form_screen.dart';
 import '../features/operations/domain/models.dart';
 import '../features/operations/domain/repositories.dart';
+import '../services/api_exception.dart';
 
 class ActivePatrolScreen extends StatefulWidget {
   final String assignmentId;
   final List<LatLng> plannedRoute;
+  final String? parkId;
+  final String? areaId;
 
   const ActivePatrolScreen({
     super.key, 
     required this.assignmentId, 
-    required this.plannedRoute
+    required this.plannedRoute,
+    this.parkId,
+    this.areaId,
   });
 
   @override
@@ -29,6 +34,7 @@ class ActivePatrolScreen extends StatefulWidget {
 class _ActivePatrolScreenState extends State<ActivePatrolScreen> {
   bool _isLoading = false;
   bool _isMapReady = false;
+  LatLng? _lastCenteredLocation;
   final MapController _mapController = MapController();
 
   @override
@@ -40,17 +46,72 @@ class _ActivePatrolScreenState extends State<ActivePatrolScreen> {
   }
 
   Future<void> _endPatrol() async {
-    setState(() => _isLoading = true);
     final provider = Provider.of<PatrolProvider>(context, listen: false);
+    final durationStr = _formatDuration(provider.elapsedTime);
+    final distStr = '${provider.coveredDistanceKm.toStringAsFixed(2)} km';
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Complete Patrol?'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Elapsed Time: $durationStr', style: const TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 4),
+            Text('Covered Distance: $distStr', style: const TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 4),
+            Text('Waypoints Marked: ${provider.waypoints.length}'),
+            if (provider.coveredDistanceKm < 0.05 && provider.elapsedTime.inSeconds < 30) ...[
+              const SizedBox(height: 12),
+              const Text(
+                'Notice: Patrol has very short time (<30s) and minimal distance. Do you wish to complete it now?',
+                style: TextStyle(color: Colors.orange, fontSize: 13),
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppConstants.primaryGreen,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('End & Submit'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true || !mounted) return;
+
+    setState(() => _isLoading = true);
     final error = await provider.endPatrol();
     
     if (mounted) {
       setState(() => _isLoading = false);
       if (error == null) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Patrol Completed!', style: TextStyle(color: Colors.white)), backgroundColor: AppConstants.primaryGreen));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Patrol Completed and Submitted Successfully!'),
+            backgroundColor: AppConstants.primaryGreen,
+          ),
+        );
         Navigator.pop(context, true);
       } else {
-        showDialog(context: context, builder: (_) => AlertDialog(title: const Text("Error Ending Patrol"), content: Text(error), actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text("OK"))]));
+        showDialog(
+          context: context,
+          builder: (_) => AlertDialog(
+            title: const Text("Error Ending Patrol"),
+            content: Text(error),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(context), child: const Text("OK")),
+            ],
+          ),
+        );
       }
     }
   }
@@ -237,23 +298,67 @@ class _ActivePatrolScreenState extends State<ActivePatrolScreen> {
 
     final loc = await _resolveCurrentLocation();
     final user = context.read<AuthProvider>().user;
-    final parkId = (user?.parkIds.isNotEmpty == true) ? user!.parkIds.first : 'park-yala';
+    
+    String? resolvedParkId = widget.parkId;
+    String? resolvedAreaId = widget.areaId;
+
+    if (resolvedParkId == null && user?.parkIds.isNotEmpty == true) {
+      resolvedParkId = user!.parkIds.first;
+    }
+
+    try {
+      final parks = await context.read<ParkRepository>().list();
+      ParkInfo? currentPark;
+      if (resolvedParkId != null) {
+        final matches = parks.where((p) => p.id == resolvedParkId);
+        if (matches.isNotEmpty) {
+          currentPark = matches.first;
+        }
+      }
+      if (currentPark == null && parks.isNotEmpty) {
+        currentPark = parks.first;
+        resolvedParkId = currentPark.id;
+      }
+
+      if (currentPark != null && currentPark.areas.isNotEmpty) {
+        if (resolvedAreaId == null || !currentPark.areas.any((a) => a.id == resolvedAreaId)) {
+          resolvedAreaId = currentPark.areas.first.id;
+        }
+      }
+    } catch (e) {
+      debugPrint('Error resolving park info for alert: $e');
+    }
+
+    resolvedParkId ??= 'park-yala';
+    resolvedAreaId ??= 'area-b1';
+
     final alertId = const Uuid().v4();
-    final now = DateTime.now().toUtc().toIso8601String();
+    final safeTime = DateTime.now().subtract(const Duration(seconds: 2)).toUtc().toIso8601String();
+
+    final rangerName = (user?.name != null && user!.name.trim().isNotEmpty) ? user.name.trim() : 'Ranger';
+    String animalTitle = 'EMERGENCY: Ranger in Distress ($rangerName)';
+    if (animalTitle.length > 100) {
+      animalTitle = animalTitle.substring(0, 100);
+    }
+    String collarId = 'RANGER-${user?.id ?? 'DISTRESS'}';
+    if (collarId.length > 80) {
+      collarId = collarId.substring(0, 80);
+    }
 
     final payload = <String, dynamic>{
-      'parkId': parkId,
-      'areaId': 'area-b1',
-      'animal': 'EMERGENCY: Ranger in Distress (${user?.name ?? 'Ranger'})',
-      'collarId': 'RANGER-${user?.id ?? 'DISTRESS'}',
-      'riskLevel': 'CRITICAL',
+      'parkId': resolvedParkId,
+      'areaId': resolvedAreaId,
+      'animal': animalTitle,
+      'collarId': collarId,
+      'riskLevel': 'HIGH',
       'location': {
         'latitude': loc.latitude,
         'longitude': loc.longitude,
-        'source': 'MANUAL',
+        'accuracyMeters': 10.0,
+        'source': 'GPS',
       },
-      'locationUpdatedAt': now,
-      'detectedAt': now,
+      'locationUpdatedAt': safeTime,
+      'detectedAt': safeTime,
     };
 
     try {
@@ -268,9 +373,13 @@ class _ActivePatrolScreenState extends State<ActivePatrolScreen> {
       );
     } catch (e) {
       if (!mounted) return;
+      String errorMsg = e.toString();
+      if (e is ApiException) {
+        errorMsg = e.message;
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error dispatching alert: $e'),
+          content: Text('Error dispatching alert: $errorMsg'),
           backgroundColor: Colors.red,
         ),
       );
@@ -288,7 +397,10 @@ class _ActivePatrolScreenState extends State<ActivePatrolScreen> {
   Widget build(BuildContext context) {
     return Consumer<PatrolProvider>(
       builder: (context, patrol, child) {
-        if (patrol.actualPath.isNotEmpty && _isMapReady) {
+        if (patrol.actualPath.isNotEmpty &&
+            _isMapReady &&
+            _lastCenteredLocation != patrol.actualPath.last) {
+          _lastCenteredLocation = patrol.actualPath.last;
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) {
               try {

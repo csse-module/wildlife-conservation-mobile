@@ -7,6 +7,7 @@ import 'registration_screen.dart';
 import 'change_password_screen.dart';
 import 'admin_login_screen.dart';
 import 'forgot_password_screen.dart';
+import '../widgets/server_config_dialog.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -81,6 +82,17 @@ class _LoginScreenState extends State<LoginScreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  Align(
+                    alignment: Alignment.topRight,
+                    child: IconButton(
+                      icon: const Icon(
+                        Icons.settings_ethernet,
+                        color: AppConstants.primaryGreen,
+                      ),
+                      tooltip: 'Server Connection Settings',
+                      onPressed: () => ServerConfigDialog.show(context),
+                    ),
+                  ),
                   // Logo
                   ClipRRect(
                     borderRadius: BorderRadius.circular(16.0),

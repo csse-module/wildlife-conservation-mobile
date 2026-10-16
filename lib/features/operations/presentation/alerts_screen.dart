@@ -1,7 +1,10 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 import '../../../providers/auth_provider.dart';
+import '../../../services/api_service.dart';
 import '../domain/models.dart';
 import '../domain/repositories.dart';
 import 'widgets.dart';
@@ -35,6 +38,18 @@ class _AlertsScreenState extends State<AlertsScreen> {
   Widget build(BuildContext context) => OperationScaffold(
     title: 'Conflict alerts',
     actions: [
+      if (context.watch<AuthProvider>().user?.role == 'PARK_MANAGER')
+        TextButton.icon(
+          onPressed: () async {
+            await Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const CreateAlertScreen()),
+            );
+            if (mounted) setState(_load);
+          },
+          icon: const Icon(Icons.add_alert, color: Colors.white),
+          label: const Text('Create alert', style: TextStyle(color: Colors.white)),
+        ),
       IconButton(
         onPressed: () => setState(_load),
         icon: const Icon(Icons.refresh),
@@ -236,7 +251,25 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
             DetailRow('Support requests recorded', '${alert.supportCount}'),
             if (alert.actionTaken != null)
               DetailRow('Action taken', alert.actionTaken!),
-            if (alert.result != null) DetailRow('Outcome', alert.result!),
+            if (alert.result != null) DetailRow('Outcome / Status', alert.result!),
+            if (alert.notes != null && alert.notes!.isNotEmpty)
+              DetailRow('Resolution notes', alert.notes!),
+            if (alert.photoIds.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text(
+                'Resolution photos (${alert.photoIds.length})',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              ...alert.photoIds.map(
+                (photoId) => Padding(
+                  padding: const EdgeInsets.only(bottom: 8.0),
+                  child: ProtectedPhoto(
+                    load: context.read<AlertRepository>().photo(photoId),
+                  ),
+                ),
+              ),
+            ],
             if (responder && alert.status == 'NEW') ...[
               FilledButton.icon(
                 onPressed: _busy
@@ -298,13 +331,21 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
                 onPressed: _busy
                     ? null
                     : () async {
-                        final response = await responseDialog(context);
-                        if (response == null || !context.mounted) return;
+                        final resolution =
+                            await showDialog<AlertResolutionResult>(
+                          context: context,
+                          builder: (_) => AlertResolutionDialog(
+                            parkId: alert.parkId,
+                          ),
+                        );
+                        if (resolution == null || !context.mounted) return;
                         await _perform(() async {
                           await context.read<AlertRepository>().resolve(
                             alert.id,
-                            response.action,
-                            response.result,
+                            resolution.actionTaken,
+                            resolution.result,
+                            notes: resolution.notes,
+                            photoIds: resolution.photoIds,
                           );
                         });
                       },
@@ -369,18 +410,306 @@ class _ReasonDialogState extends State<_ReasonDialog> {
   );
 }
 
+class AlertResolutionResult {
+  final String actionTaken;
+  final String result;
+  final String? notes;
+  final List<String> photoIds;
+
+  const AlertResolutionResult({
+    required this.actionTaken,
+    required this.result,
+    this.notes,
+    this.photoIds = const [],
+  });
+}
+
+class AlertResolutionDialog extends StatefulWidget {
+  const AlertResolutionDialog({super.key, required this.parkId});
+  final String parkId;
+
+  @override
+  State<AlertResolutionDialog> createState() => _AlertResolutionDialogState();
+}
+
+class _AlertResolutionDialogState extends State<AlertResolutionDialog> {
+  final _form = GlobalKey<FormState>();
+  final _action = TextEditingController();
+  final _outcome = TextEditingController(text: 'Resolved');
+  final _notes = TextEditingController();
+  String _resolutionStatus = 'Resolved';
+  final List<({Uint8List bytes, String name})> _photos = [];
+  bool _uploading = false;
+
+  @override
+  void dispose() {
+    _action.dispose();
+    _outcome.dispose();
+    _notes.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickImage(ImageSource source) async {
+    if (_photos.length >= 3) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Maximum 3 photos allowed.')),
+      );
+      return;
+    }
+    try {
+      final file = await ImagePicker().pickImage(
+        source: source,
+        maxWidth: 1600,
+        maxHeight: 1600,
+        imageQuality: 75,
+      );
+      if (file == null) return;
+      final bytes = await file.readAsBytes();
+      if (bytes.length > 2 * 1024 * 1024) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Please select an image smaller than 2 MB.')),
+          );
+        }
+        return;
+      }
+      if (mounted) {
+        setState(() {
+          _photos.add((bytes: bytes, name: file.name));
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error picking image: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _submit() async {
+    if (!_form.currentState!.validate()) return;
+    setState(() => _uploading = true);
+
+    try {
+      final photoIds = <String>[];
+      final api = context.read<ApiService>();
+      for (final photo in _photos) {
+        final id = const Uuid().v4();
+        await api.uploadImage(
+          id: id,
+          parkId: widget.parkId,
+          category: 'ALERT_RESPONSE',
+          bytes: photo.bytes,
+          name: photo.name,
+        );
+        photoIds.add(id);
+      }
+
+      if (mounted) {
+        Navigator.pop(
+          context,
+          AlertResolutionResult(
+            actionTaken: _action.text.trim(),
+            result: _outcome.text.trim().isNotEmpty
+                ? _outcome.text.trim()
+                : _resolutionStatus,
+            notes: _notes.text.trim().isNotEmpty ? _notes.text.trim() : null,
+            photoIds: photoIds,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _uploading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to upload photos: $e')),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('Resolve Conflict Alert'),
+    content: SingleChildScrollView(
+      child: Form(
+        key: _form,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            DropdownButtonFormField<String>(
+              value: _resolutionStatus,
+              decoration: const InputDecoration(labelText: 'Resolution status'),
+              items: ['Resolved', 'Partially Resolved', 'Not Resolved']
+                  .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                  .toList(),
+              onChanged: _uploading
+                  ? null
+                  : (val) {
+                      if (val != null) {
+                        setState(() {
+                          _resolutionStatus = val;
+                          _outcome.text = val;
+                        });
+                      }
+                    },
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _action,
+              maxLength: 1000,
+              minLines: 2,
+              maxLines: 4,
+              decoration: const InputDecoration(
+                labelText: 'Action taken',
+                hintText: 'e.g. Dispatched ranger squad, guided herd to safe zone',
+              ),
+              validator: requiredText,
+            ),
+            const SizedBox(height: 8),
+            TextFormField(
+              controller: _outcome,
+              maxLength: 500,
+              decoration: const InputDecoration(
+                labelText: 'Outcome',
+                hintText: 'e.g. Conflict resolved safely',
+              ),
+              validator: requiredText,
+            ),
+            const SizedBox(height: 8),
+            TextFormField(
+              controller: _notes,
+              maxLength: 2000,
+              minLines: 2,
+              maxLines: 4,
+              decoration: const InputDecoration(
+                labelText: 'Additional notes (optional)',
+                hintText: 'Enter any observations or follow-up recommendations',
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Attach Resolution Images (${_photos.length}/3)',
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+            ),
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                OutlinedButton.icon(
+                  onPressed: _uploading || _photos.length >= 3
+                      ? null
+                      : () => _pickImage(ImageSource.camera),
+                  icon: const Icon(Icons.camera_alt, size: 18),
+                  label: const Text('Camera'),
+                ),
+                const SizedBox(width: 8),
+                OutlinedButton.icon(
+                  onPressed: _uploading || _photos.length >= 3
+                      ? null
+                      : () => _pickImage(ImageSource.gallery),
+                  icon: const Icon(Icons.photo_library, size: 18),
+                  label: const Text('Gallery'),
+                ),
+              ],
+            ),
+            if (_photos.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: _photos.asMap().entries.map((entry) {
+                  final index = entry.key;
+                  final photo = entry.value;
+                  return Stack(
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: Image.memory(
+                          photo.bytes,
+                          width: 80,
+                          height: 80,
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                      Positioned(
+                        top: 2,
+                        right: 2,
+                        child: GestureDetector(
+                          onTap: _uploading
+                              ? null
+                              : () => setState(() => _photos.removeAt(index)),
+                          child: Container(
+                            decoration: const BoxDecoration(
+                              color: Colors.black54,
+                              shape: BoxShape.circle,
+                            ),
+                            padding: const EdgeInsets.all(3),
+                            child: const Icon(Icons.close, size: 14, color: Colors.white),
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                }).toList(),
+              ),
+            ],
+            if (_uploading) ...[
+              const SizedBox(height: 12),
+              const Center(
+                child: Column(
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 6),
+                    Text('Uploading resolution images...'),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: _uploading ? null : () => Navigator.pop(context),
+        child: const Text('Cancel'),
+      ),
+      FilledButton(
+        onPressed: _uploading ? null : _submit,
+        child: const Text('Resolve'),
+      ),
+    ],
+  );
+}
+
 class CreateAlertScreen extends StatefulWidget {
-  const CreateAlertScreen({super.key});
+  const CreateAlertScreen({
+    super.key,
+    this.initialParkId,
+    this.initialAreaId,
+    this.initialAnimal,
+    this.initialLatitude,
+    this.initialLongitude,
+  });
+
+  final String? initialParkId;
+  final String? initialAreaId;
+  final String? initialAnimal;
+  final double? initialLatitude;
+  final double? initialLongitude;
+
   @override
   State<CreateAlertScreen> createState() => _CreateAlertScreenState();
 }
 
 class _CreateAlertScreenState extends State<CreateAlertScreen> {
   final _form = GlobalKey<FormState>();
-  final _animal = TextEditingController(text: 'Elephant'),
-      _collar = TextEditingController();
-  final _latitude = TextEditingController(),
-      _longitude = TextEditingController();
+  late final TextEditingController _animal;
+  final _collar = TextEditingController(text: 'COMMUNITY-OBS');
+  late final TextEditingController _latitude;
+  late final TextEditingController _longitude;
   late Future<List<ParkInfo>> _parks;
   ParkInfo? _park;
   String? _area;
@@ -388,9 +717,22 @@ class _CreateAlertScreenState extends State<CreateAlertScreen> {
   bool _busy = false;
   String? _id;
   Map<String, dynamic>? _submitted;
+  bool _initializedDefaults = false;
+
   @override
   void initState() {
     super.initState();
+    _animal = TextEditingController(text: widget.initialAnimal ?? 'Elephant');
+    _latitude = TextEditingController(
+      text: widget.initialLatitude != null
+          ? widget.initialLatitude!.toStringAsFixed(6)
+          : '',
+    );
+    _longitude = TextEditingController(
+      text: widget.initialLongitude != null
+          ? widget.initialLongitude!.toStringAsFixed(6)
+          : '',
+    );
     _parks = context.read<ParkRepository>().list();
   }
 
@@ -408,11 +750,12 @@ class _CreateAlertScreenState extends State<CreateAlertScreen> {
       'parkId': _park!.id,
       'areaId': _area,
       'animal': _animal.text.trim(),
-      'collarId': _collar.text.trim(),
+      'collarId': _collar.text.trim().isNotEmpty ? _collar.text.trim() : 'COLLAR-OBS',
       'riskLevel': _risk,
       'location': {
         'latitude': double.parse(_latitude.text),
         'longitude': double.parse(_longitude.text),
+        'accuracyMeters': 10.0,
         'source': 'MANUAL',
       },
     };
@@ -455,6 +798,24 @@ class _CreateAlertScreenState extends State<CreateAlertScreen> {
         if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
         }
+
+        if (!_initializedDefaults && snapshot.data!.isNotEmpty) {
+          _initializedDefaults = true;
+          if (widget.initialParkId != null) {
+            final matches = snapshot.data!.where((p) => p.id == widget.initialParkId);
+            if (matches.isNotEmpty) {
+              _park = matches.first;
+            }
+          }
+          _park ??= snapshot.data!.first;
+          if (widget.initialAreaId != null &&
+              _park!.areas.any((a) => a.id == widget.initialAreaId)) {
+            _area = widget.initialAreaId;
+          } else if (_park!.areas.isNotEmpty) {
+            _area = _park!.areas.first.id;
+          }
+        }
+
         return ListView(
           padding: const EdgeInsets.all(20),
           children: [
@@ -468,6 +829,7 @@ class _CreateAlertScreenState extends State<CreateAlertScreen> {
                   ),
                   const SizedBox(height: 16),
                   DropdownButtonFormField<String>(
+                    value: _park?.id,
                     isExpanded: true,
                     decoration: const InputDecoration(labelText: 'Park'),
                     items: snapshot.data!
@@ -485,12 +847,13 @@ class _CreateAlertScreenState extends State<CreateAlertScreen> {
                             _park = snapshot.data!.firstWhere(
                               (park) => park.id == id,
                             );
-                            _area = null;
+                            _area = _park!.areas.isNotEmpty ? _park!.areas.first.id : null;
                           }),
                   ),
                   const SizedBox(height: 16),
                   DropdownButtonFormField<String>(
                     key: ValueKey(_park?.id),
+                    value: _area,
                     isExpanded: true,
                     decoration: const InputDecoration(labelText: 'Area'),
                     items: (_park?.areas ?? [])
@@ -502,7 +865,7 @@ class _CreateAlertScreenState extends State<CreateAlertScreen> {
                         )
                         .toList(),
                     validator: requiredText,
-                    onChanged: _busy ? null : (area) => _area = area,
+                    onChanged: _busy ? null : (area) => setState(() => _area = area),
                   ),
                   const SizedBox(height: 16),
                   TextFormField(

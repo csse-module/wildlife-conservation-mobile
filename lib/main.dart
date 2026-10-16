@@ -10,8 +10,9 @@ import 'features/operations/data/api_repositories.dart';
 import 'features/operations/data/report_outbox.dart';
 import 'features/operations/domain/repositories.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await ApiService.initCustomBaseUrl();
 
   runApp(
     MultiProvider(

@@ -34,26 +34,47 @@ class _CompletedPatrolMapScreenState extends State<CompletedPatrolMapScreen> {
         final data = jsonDecode(response.body)['data'];
         
         final rawTrackPoints = data['trackPoints'] as List<dynamic>? ?? [];
-        _trackPoints = rawTrackPoints.map((tp) => LatLng(tp['latitude'], tp['longitude'])).toList();
+        _trackPoints = [];
+        for (var tp in rawTrackPoints) {
+          final lat = (tp['latitude'] as num?)?.toDouble();
+          final lng = (tp['longitude'] as num?)?.toDouble();
+          if (lat != null && lng != null) {
+            _trackPoints.add(LatLng(lat, lng));
+          }
+        }
 
         final rawWaypoints = data['waypoints'] as List<dynamic>? ?? [];
         for (var wp in rawWaypoints) {
-          _markers.add(
-            Marker(
-              point: LatLng(wp['location']['latitude'], wp['location']['longitude']),
-              child: const Icon(Icons.location_on, color: Colors.orange, size: 30),
-            )
-          );
+          final loc = wp['location'];
+          if (loc != null) {
+            final lat = (loc['latitude'] as num?)?.toDouble();
+            final lng = (loc['longitude'] as num?)?.toDouble();
+            if (lat != null && lng != null) {
+              _markers.add(
+                Marker(
+                  point: LatLng(lat, lng),
+                  child: const Icon(Icons.location_on, color: Colors.orange, size: 30),
+                ),
+              );
+            }
+          }
         }
 
         final rawObservations = data['observations'] as List<dynamic>? ?? [];
         for (var obs in rawObservations) {
-          _markers.add(
-            Marker(
-              point: LatLng(obs['location']['latitude'], obs['location']['longitude']),
-              child: const Icon(Icons.visibility, color: Colors.purple, size: 30),
-            )
-          );
+          final loc = obs['location'];
+          if (loc != null) {
+            final lat = (loc['latitude'] as num?)?.toDouble();
+            final lng = (loc['longitude'] as num?)?.toDouble();
+            if (lat != null && lng != null) {
+              _markers.add(
+                Marker(
+                  point: LatLng(lat, lng),
+                  child: const Icon(Icons.visibility, color: Colors.purple, size: 30),
+                ),
+              );
+            }
+          }
         }
       }
     } catch (e) {

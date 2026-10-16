@@ -24,6 +24,8 @@ import 'package:wildlife_conservation_mobile/providers/patrol_provider.dart';
 import 'package:wildlife_conservation_mobile/features/operations/presentation/camera_images_screen.dart';
 import 'package:wildlife_conservation_mobile/models/user_model.dart';
 import 'package:wildlife_conservation_mobile/services/api_service.dart';
+import 'package:wildlife_conservation_mobile/screens/rangers_list_screen.dart';
+import 'package:wildlife_conservation_mobile/screens/ranger_details_screen.dart';
 
 class MemoryOutbox implements ReportOutboxStore {
   final Map<String, List<PendingReport>> records = {};
@@ -136,6 +138,23 @@ class Scenario {
         if (path == '/analytics/summary') return success(analytics());
         if (path == '/alerts') {
           return success({'items': [], 'page': 0, 'size': 20, 'totalItems': 0});
+        }
+        if (path.startsWith('/alerts/') && path.endsWith('/response')) {
+          final body = jsonDecode(request.body) as Map<String, dynamic>;
+          submitted.add(body);
+          return success({
+            'id': path.split('/')[2],
+            'parkId': 'park-yala',
+            'areaId': 'area-b1',
+            'animal': 'Elephant',
+            'collarId': 'COLLAR-1',
+            'riskLevel': 'HIGH',
+            'status': 'RESOLVED',
+            'detectedAt': '2026-10-09T10:00:00Z',
+            'location': {'latitude': 6.3, 'longitude': 81.5},
+            'supportRequests': [],
+            'response': body,
+          });
         }
         if (path == '/camera-trap-images') {
           return success({'items': [], 'page': 0, 'size': 20, 'totalItems': 0});
@@ -256,6 +275,7 @@ class Scenario {
       Provider<PatrolManagementRepository>.value(
         value: ApiPatrolManagementRepository(api),
       ),
+      Provider<ApiService>.value(value: api),
     ],
     child: MaterialApp(
       theme: ThemeData(
@@ -727,8 +747,9 @@ void main() {
   });
 
   // TEST: Ranger Emergency Alert Dispatch
-  // This test verifies that triggering an emergency alert submits a CRITICAL risk level alert
-  // with ranger distress details to the AlertRepository so administrators are immediately notified.
+  // This test verifies that triggering an emergency alert submits a HIGH risk level alert
+  // conforming to the backend RiskLevel enum (LOW, MEDIUM, HIGH) with ranger distress details
+  // to the AlertRepository so administrators are immediately notified.
   test('ranger emergency alert dispatches critical risk alert to repository', () async {
     Map<String, dynamic>? alertPayload;
     final api = ApiService(
@@ -748,13 +769,16 @@ void main() {
       'areaId': 'area-b1',
       'animal': 'EMERGENCY: Ranger in Distress (Ranger Perera)',
       'collarId': 'RANGER-007',
-      'riskLevel': 'CRITICAL',
-      'location': {'latitude': 6.375, 'longitude': 81.382, 'source': 'MANUAL'},
+      'riskLevel': 'HIGH',
+      'location': {'latitude': 6.375, 'longitude': 81.382, 'source': 'GPS'},
+      'locationUpdatedAt': '2026-10-10T10:00:00Z',
+      'detectedAt': '2026-10-10T10:00:00Z',
     });
 
-    expect(alertPayload?['riskLevel'], 'CRITICAL');
+    expect(alertPayload?['riskLevel'], 'HIGH');
     expect(alertPayload?['animal'], contains('Ranger in Distress'));
     expect(alertPayload?['location']?['latitude'], 6.375);
+    expect(alertPayload?['location']?['source'], 'GPS');
   });
 
   // TEST: Ranger Manual Waypoint Recording
@@ -831,5 +855,184 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     scenario.outbox.dispose();
     await tester.binding.setSurfaceSize(null);
+  });
+
+  // TEST: Manager Create Alert for Available Community Conflict Report
+  // This test verifies that each incoming community conflict report displayed on the
+  // manager dashboard provides a dedicated "Create Alert" button to convert that specific
+  // incident into an operations alert, rather than only providing a button at the bottom.
+  testWidgets('manager dashboard presents Create Alert button on each community conflict report', (tester) async {
+    final scenario = Scenario('PARK_MANAGER');
+    await tester.binding.setSurfaceSize(const Size(1100, 1500));
+    await tester.pumpWidget(scenario.app(const OperationsDashboardScreen()));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Incoming community reports'), findsOneWidget);
+    expect(find.text('Create Alert'), findsAtLeastNWidgets(1));
+    await tester.pumpWidget(const SizedBox.shrink());
+    scenario.outbox.dispose();
+    await tester.binding.setSurfaceSize(null);
+  });
+
+  // TEST: Ranger Alert Resolution with Outcome, Notes, and Media Photo Attachments
+  // This test verifies that when resolving an alert, the resolution request contains
+  // action taken, outcome/result status, optional notes, and photo IDs conforming to backend DTO.
+  test('ranger resolves alert with action taken, outcome, notes, and photos', () async {
+    final scenario = Scenario('RANGER');
+    final alertRepo = ApiAlertRepository(scenario.api);
+
+    final resolved = await alertRepo.resolve(
+      'alert-101',
+      'Deployed field rangers to village boundary',
+      'Resolved',
+      notes: 'Elephants moved safely away from crops without harm.',
+      photoIds: ['photo-1', 'photo-2'],
+    );
+
+    expect(resolved.id, 'alert-101');
+    expect(resolved.status, 'RESOLVED');
+    expect(resolved.actionTaken, 'Deployed field rangers to village boundary');
+    expect(resolved.result, 'Resolved');
+    expect(resolved.notes, 'Elephants moved safely away from crops without harm.');
+    expect(resolved.photoIds, ['photo-1', 'photo-2']);
+
+    final lastReq = scenario.submitted.last;
+    expect(lastReq['actionTaken'], 'Deployed field rangers to village boundary');
+    expect(lastReq['result'], 'Resolved');
+    expect(lastReq['notes'], 'Elephants moved safely away from crops without harm.');
+    expect(lastReq['photoIds'], ['photo-1', 'photo-2']);
+  });
+
+  // TEST: Track Rangers Status (Available vs On Patrol)
+  // This test verifies that completed patrol assignments (status == 'COMPLETED') do NOT mark
+  // the ranger as busy, displaying 'Available', while uncompleted assignments (status == 'ASSIGNED')
+  // correctly mark the ranger as 'On Patrol'.
+  testWidgets('admin track rangers marks completed patrol rangers as available and pending as on patrol', (tester) async {
+    final api = ApiService(
+      baseUrl: 'http://test/api/v1',
+      client: MockClient((request) async {
+        final path = request.url.path;
+        if (path.endsWith('/users')) {
+          return success({
+            'items': [
+              {'id': 'ranger-avail', 'name': 'Available Ranger', 'role': 'RANGER'},
+              {'id': 'ranger-busy', 'name': 'Busy Ranger', 'role': 'RANGER'},
+            ],
+            'page': 0,
+            'size': 100,
+            'totalPages': 1,
+            'totalItems': 2,
+          });
+        }
+        if (path.endsWith('/patrol-assignments')) {
+          return success({
+            'items': [
+              {
+                'id': 'assign-1',
+                'rangerId': 'ranger-avail',
+                'status': 'COMPLETED',
+                'isCompleted': true,
+              },
+              {
+                'id': 'assign-2',
+                'rangerId': 'ranger-busy',
+                'status': 'ASSIGNED',
+                'isCompleted': false,
+              },
+            ],
+            'page': 0,
+            'size': 100,
+            'totalPages': 1,
+            'totalItems': 2,
+          });
+        }
+        return http.Response('Not Found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RangersListScreen(apiService: api),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Available Ranger'), findsOneWidget);
+    expect(find.text('Busy Ranger'), findsOneWidget);
+    expect(find.text('Available'), findsOneWidget);
+    expect(find.text('On Patrol'), findsOneWidget);
+  });
+
+  // TEST: Ranger Details Completed Patrols and Incidents Query Pagination
+  // This test verifies that RangerDetailsScreen queries /patrols and /incidents with page size <= 100
+  // to adhere to backend Spring Boot @Max(100) constraint, and correctly presents completed patrols
+  // and reported incidents matching the ranger.
+  testWidgets('ranger details queries completed patrols and incidents with size <= 100 and shows records', (tester) async {
+    final api = ApiService(
+      baseUrl: 'http://test/api/v1',
+      client: MockClient((request) async {
+        final path = request.url.path;
+        final size = int.tryParse(request.url.queryParameters['size'] ?? '') ?? 0;
+        expect(size <= 100, isTrue, reason: 'Page query size must not exceed backend limit of 100');
+
+        if (path.endsWith('/patrols')) {
+          return success({
+            'items': [
+              {
+                'id': 'patrol-1',
+                'rangerId': 'ranger-demo',
+                'endedAt': '2026-10-10T12:00:00Z',
+                'recordedDistanceMeters': 3500.0,
+                'waypointCount': 4,
+                'observationCount': 2,
+              },
+            ],
+            'page': 0,
+            'size': 100,
+            'totalPages': 1,
+            'totalItems': 1,
+          });
+        }
+        if (path.endsWith('/incidents')) {
+          return success({
+            'items': [
+              {
+                'id': 'incident-1',
+                'reportedBy': 'ranger-demo',
+                'type': 'POACHING_TRAP',
+                'description': 'Removed wire snare near river',
+                'detectedAt': '2026-10-10T11:00:00Z',
+              },
+            ],
+            'page': 0,
+            'size': 100,
+            'totalPages': 1,
+            'totalItems': 1,
+          });
+        }
+        return http.Response('Not Found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RangerDetailsScreen(
+          rangerId: 'ranger-demo',
+          rangerName: 'Ranger Demo',
+          apiService: api,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Completed Patrols'), findsOneWidget);
+    expect(find.text('Distance: 3.50 km\nWaypoints: 4 | Sightings: 2'), findsOneWidget);
+
+    // Switch to Reported Incidents tab
+    await tester.tap(find.text('Reported Incidents'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('POACHING TRAP'), findsOneWidget);
+    expect(find.textContaining('Removed wire snare near river'), findsOneWidget);
   });
 }

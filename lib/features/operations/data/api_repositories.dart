@@ -341,13 +341,22 @@ class ApiAlertRepository implements AlertRepository {
   Future<AlertInfo> resolve(
     String id,
     String actionTaken,
-    String result,
-  ) async => _alert(
-    await _api.putData('/alerts/$id/response', {
+    String result, {
+    String? notes,
+    List<String> photoIds = const [],
+  }) async {
+    final payload = <String, dynamic>{
       'actionTaken': actionTaken,
       'result': result,
-    }),
-  );
+      if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
+      if (photoIds.isNotEmpty) 'photoIds': photoIds,
+    };
+    return _alert(await _api.putData('/alerts/$id/response', payload));
+  }
+
+  @override
+  Future<Uint8List> photo(String id) => _api.getBytes('/media/$id/content');
+
   @override
   Future<void> create(String id, Json payload) async {
     await _api.putData('/alerts/$id', payload);
@@ -371,6 +380,8 @@ class ApiAlertRepository implements AlertRepository {
       assignedOfficerId: json['assignedOfficerId'] as String?,
       actionTaken: response?['actionTaken'] as String?,
       result: response?['result'] as String?,
+      notes: response?['notes'] as String?,
+      photoIds: (response?['photoIds'] as List? ?? []).map((e) => e.toString()).toList(),
     );
   }
 }

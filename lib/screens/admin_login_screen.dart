@@ -5,6 +5,7 @@ import '../utils/constants.dart';
 import 'admin_dashboard_screen.dart';
 import 'change_password_screen.dart';
 import 'forgot_password_screen.dart';
+import '../widgets/server_config_dialog.dart';
 
 class AdminLoginScreen extends StatefulWidget {
   const AdminLoginScreen({super.key});
@@ -85,6 +86,13 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
         backgroundColor: AppConstants.primaryGreen,
         foregroundColor: Colors.white,
         elevation: 0,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings_ethernet),
+            tooltip: 'Server Connection Settings',
+            onPressed: () => ServerConfigDialog.show(context),
+          ),
+        ],
       ),
       body: SafeArea(
         child: Center(

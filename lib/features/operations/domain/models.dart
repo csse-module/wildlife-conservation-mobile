@@ -69,12 +69,15 @@ class AlertInfo {
     this.assignedOfficerId,
     this.actionTaken,
     this.result,
+    this.notes,
+    this.photoIds = const [],
   });
   final String id, parkId, areaId, animal, collarId, riskLevel, status;
   final DateTime detectedAt;
   final double latitude, longitude;
   final int supportCount;
-  final String? assignedOfficerId, actionTaken, result;
+  final String? assignedOfficerId, actionTaken, result, notes;
+  final List<String> photoIds;
 }
 
 class DailyStatistic {
