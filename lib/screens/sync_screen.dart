@@ -6,7 +6,7 @@ import '../services/db_helper.dart';
 import '../utils/constants.dart';
 
 class SyncScreen extends StatefulWidget {
-  const SyncScreen({Key? key}) : super(key: key);
+  const SyncScreen({super.key});
 
   @override
   State<SyncScreen> createState() => _SyncScreenState();
@@ -39,7 +39,6 @@ class _SyncScreenState extends State<SyncScreen> {
         final id = task['id'];
         final method = task['method'];
         final url = task['url'];
-        final type = task['type'];
         final String bodyString = task['body'];
         final String? imagePath = task['imagePath'];
 

@@ -4,7 +4,7 @@ import '../providers/admin_provider.dart';
 import '../utils/constants.dart';
 
 class AddParkScreen extends StatefulWidget {
-  const AddParkScreen({Key? key}) : super(key: key);
+  const AddParkScreen({super.key});
 
   @override
   State<AddParkScreen> createState() => _AddParkScreenState();

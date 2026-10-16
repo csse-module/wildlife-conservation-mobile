@@ -8,7 +8,7 @@ class RangerDetailsScreen extends StatefulWidget {
   final String rangerId;
   final String rangerName;
 
-  const RangerDetailsScreen({Key? key, required this.rangerId, required this.rangerName}) : super(key: key);
+  const RangerDetailsScreen({super.key, required this.rangerId, required this.rangerName});
 
   @override
   State<RangerDetailsScreen> createState() => _RangerDetailsScreenState();
@@ -95,7 +95,8 @@ class _RangerDetailsScreenState extends State<RangerDetailsScreen> with SingleTi
       itemCount: _patrols.length,
       itemBuilder: (context, index) {
         final patrol = _patrols[index];
-        final date = DateTime.parse(patrol['endedAt']).toLocal();
+        final endedAtStr = patrol['endedAt'];
+        final date = endedAtStr != null ? DateTime.parse(endedAtStr).toLocal() : DateTime.now();
         return Card(
           margin: const EdgeInsets.only(bottom: 12),
           child: ListTile(
@@ -124,7 +125,8 @@ class _RangerDetailsScreenState extends State<RangerDetailsScreen> with SingleTi
       itemCount: _incidents.length,
       itemBuilder: (context, index) {
         final incident = _incidents[index];
-        final date = DateTime.parse(incident['detectedAt']).toLocal();
+        final detectedAtStr = incident['detectedAt'];
+        final date = detectedAtStr != null ? DateTime.parse(detectedAtStr).toLocal() : DateTime.now();
         return Card(
           margin: const EdgeInsets.only(bottom: 12),
           child: ListTile(
