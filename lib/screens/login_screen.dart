@@ -100,7 +100,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   
                   // App Title
                   const Text(
-                    'Wildlife Conservation',
+                    'Wild Guard',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 28,
