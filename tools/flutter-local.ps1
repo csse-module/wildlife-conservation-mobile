@@ -1,10 +1,12 @@
 param(
     [switch]$AndroidDebug,
+    [switch]$AndroidRelease,
     [string]$ApiBaseUrl
 )
 
 # Uses the installed tool snapshot when flutter.bat is broken. Does not edit the SDK.
 $ErrorActionPreference = 'Stop'
+if ($AndroidDebug -and $AndroidRelease) { throw 'Choose either AndroidDebug or AndroidRelease.' }
 $FlutterArguments = $args
 $taskProject = Split-Path -Parent $PSScriptRoot
 $taskSdk = $env:FLUTTER_ROOT
@@ -24,7 +26,7 @@ $env:FLUTTER_ROOT = $taskSdk
 
 Push-Location -LiteralPath $taskProject
 try {
-    if (-not $AndroidDebug) {
+    if (-not ($AndroidDebug -or $AndroidRelease)) {
         if (-not $FlutterArguments) { $FlutterArguments = @('--version') }
         & $taskDart "--packages=$taskPackages" $taskSnapshot @FlutterArguments
         exit $LASTEXITCODE
@@ -56,9 +58,14 @@ gradle.beforeProject { project ->
     }
     & $taskDart "--packages=$taskPackages" $taskSnapshot pub get --offline
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-    $taskGradleArguments = @(':app:assembleDebug', '--init-script', $taskInit,
-        '-Ptarget-platform=android-arm,android-arm64,android-x64', '-Ptarget=lib/main.dart',
-        '-Ptrack-widget-creation=true', '-Ptree-shake-icons=false')
+    $taskGradleTask = if ($AndroidRelease) { ':app:assembleRelease' } else { ':app:assembleDebug' }
+    $taskGradleArguments = @($taskGradleTask, '--init-script', $taskInit,
+        '-Ptarget-platform=android-arm,android-arm64,android-x64', '-Ptarget=lib/main.dart')
+    if ($AndroidRelease) {
+        $taskGradleArguments += '-Ptree-shake-icons=true'
+    } else {
+        $taskGradleArguments += @('-Ptrack-widget-creation=true', '-Ptree-shake-icons=false')
+    }
     if ($ApiBaseUrl) {
         $taskDefine = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("API_BASE_URL=$ApiBaseUrl"))
         $taskGradleArguments += "-Pdart-defines=$taskDefine"
