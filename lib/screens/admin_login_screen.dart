@@ -4,6 +4,7 @@ import '../providers/auth_provider.dart';
 import '../utils/constants.dart';
 import 'admin_dashboard_screen.dart';
 import 'change_password_screen.dart';
+import 'forgot_password_screen.dart';
 
 class AdminLoginScreen extends StatefulWidget {
   const AdminLoginScreen({super.key});
@@ -198,6 +199,23 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                               letterSpacing: 1.2,
                             ),
                           ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextButton(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const ForgotPasswordScreen(),
+                        ),
+                      );
+                    },
+                    child: const Text(
+                      'Forgot Password?',
+                      style: TextStyle(
+                        color: AppConstants.textLight,
+                      ),
+                    ),
                   ),
                 ],
               ),

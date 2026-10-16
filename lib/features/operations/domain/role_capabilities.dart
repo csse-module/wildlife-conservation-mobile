@@ -8,6 +8,7 @@ enum OperationAction {
   addStaff,
   addPark,
   assignPatrol,
+  patrolRoutes,
   rangers,
   myPatrols,
   reportIncident,
@@ -23,6 +24,7 @@ List<OperationAction> actionsForRole(String role) => switch (role) {
     OperationAction.cameras,
     OperationAction.addStaff,
     OperationAction.addPark,
+    OperationAction.patrolRoutes,
     OperationAction.assignPatrol,
     OperationAction.rangers,
   ],
@@ -41,7 +43,6 @@ List<OperationAction> actionsForRole(String role) => switch (role) {
   'RESEARCHER' => [OperationAction.analytics, OperationAction.cameras],
   'COMMUNITY_MEMBER' => [
     OperationAction.reportConflict,
-    OperationAction.communityReports,
     OperationAction.outbox,
   ],
   _ => [],

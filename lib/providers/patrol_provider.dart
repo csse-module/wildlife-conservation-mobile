@@ -86,13 +86,17 @@ class PatrolProvider with ChangeNotifier {
   }
 
   void markWaypoint(String label, Position position) {
+    markWaypointAt(label, position.latitude, position.longitude);
+  }
+
+  void markWaypointAt(String label, double latitude, double longitude) {
     _waypoints.add({
       'id': const Uuid().v4().toLowerCase(),
       'label': label,
       'recordedAt': DateTime.now().toUtc().toIso8601String(),
       'location': {
-        'latitude': position.latitude,
-        'longitude': position.longitude,
+        'latitude': latitude,
+        'longitude': longitude,
       },
       'notes': 'Manual Waypoint',
     });
@@ -100,13 +104,17 @@ class PatrolProvider with ChangeNotifier {
   }
 
   void reportSighting(String details, Position position) {
+    reportSightingAt(details, position.latitude, position.longitude);
+  }
+
+  void reportSightingAt(String details, double latitude, double longitude) {
     _observations.add({
       'id': const Uuid().v4().toLowerCase(),
       'text': details,
       'observedAt': DateTime.now().toUtc().toIso8601String(),
       'location': {
-        'latitude': position.latitude,
-        'longitude': position.longitude,
+        'latitude': latitude,
+        'longitude': longitude,
       }
     });
     notifyListeners();

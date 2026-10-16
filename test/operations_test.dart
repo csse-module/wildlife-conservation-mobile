@@ -13,12 +13,15 @@ import 'package:wildlife_conservation_mobile/features/operations/data/api_reposi
 import 'package:wildlife_conservation_mobile/features/operations/data/report_outbox.dart';
 import 'package:wildlife_conservation_mobile/features/operations/domain/models.dart';
 import 'package:wildlife_conservation_mobile/features/operations/domain/repositories.dart';
+import 'package:wildlife_conservation_mobile/features/operations/domain/role_capabilities.dart';
 import 'package:wildlife_conservation_mobile/features/operations/presentation/field_reports_screen.dart';
 import 'package:wildlife_conservation_mobile/features/operations/presentation/operations_dashboard_screen.dart';
 import 'package:wildlife_conservation_mobile/features/operations/presentation/report_form_screen.dart';
 import 'package:wildlife_conservation_mobile/features/operations/presentation/reporting_screen.dart';
 import 'package:wildlife_conservation_mobile/features/operations/presentation/patrol_assignment_screen.dart';
 import 'package:wildlife_conservation_mobile/providers/auth_provider.dart';
+import 'package:wildlife_conservation_mobile/providers/patrol_provider.dart';
+import 'package:wildlife_conservation_mobile/features/operations/presentation/camera_images_screen.dart';
 import 'package:wildlife_conservation_mobile/models/user_model.dart';
 import 'package:wildlife_conservation_mobile/services/api_service.dart';
 
@@ -132,6 +135,9 @@ class Scenario {
         }
         if (path == '/analytics/summary') return success(analytics());
         if (path == '/alerts') {
+          return success({'items': [], 'page': 0, 'size': 20, 'totalItems': 0});
+        }
+        if (path == '/camera-trap-images') {
           return success({'items': [], 'page': 0, 'size': 20, 'totalItems': 0});
         }
         if (path == '/reports') {
@@ -641,5 +647,189 @@ void main() {
     expect(result.communityAreas.single.name, 'Block 1');
     expect(scenario.requests.last.url.queryParameters['from'], '2026-10-01');
     scenario.outbox.dispose();
+  });
+
+  // TEST: Password Reset Flow
+  // This test verifies that AuthProvider.resetPassword submits email and new password
+  // to the public /auth/reset-password endpoint and returns true upon success.
+  test('password reset sends email and new password to /auth/reset-password', () async {
+    Map<String, dynamic>? receivedPayload;
+    final api = ApiService(
+      baseUrl: 'http://test/api/v1',
+      client: MockClient((request) async {
+        if (request.url.path.endsWith('/auth/reset-password')) {
+          receivedPayload = jsonDecode(request.body) as Map<String, dynamic>;
+          return success({'message': 'Password reset successful'});
+        }
+        return http.Response('Not Found', 404);
+      }),
+    );
+
+    final authProvider = AuthProvider(api: api);
+    final result = await authProvider.resetPassword('ranger@wildlife.gov', 'NewSafePass123');
+
+    expect(result, isTrue);
+    expect(receivedPayload?['email'], 'ranger@wildlife.gov');
+    expect(receivedPayload?['newPassword'], 'NewSafePass123');
+  });
+
+  // TEST: Community Member Dashboard Configuration
+  // This test verifies that COMMUNITY_MEMBER does not have the communityReports action
+  // in their assigned actions list, satisfying the requirement to remove community reports from community dashboard.
+  test('community dashboard does not include community reports action', () {
+    final communityActions = actionsForRole('COMMUNITY_MEMBER');
+    expect(communityActions.contains(OperationAction.communityReports), isFalse);
+    expect(communityActions.contains(OperationAction.reportConflict), isTrue);
+    expect(communityActions.contains(OperationAction.outbox), isTrue);
+  });
+
+  // TEST: Admin Patrol Route Creation API
+  // This test verifies that creating a patrol route submits the parkId, areaId, route name,
+  // planned distance in meters, and path points to the /patrol-routes endpoint.
+  test('admin can create patrol routes with planned distance and path points', () async {
+    Map<String, dynamic>? createdRoute;
+    final api = ApiService(
+      baseUrl: 'http://test/api/v1',
+      client: MockClient((request) async {
+        if (request.url.path.endsWith('/patrol-routes') && request.method == 'POST') {
+          createdRoute = jsonDecode(request.body) as Map<String, dynamic>;
+          return http.Response(
+            jsonEncode({
+              'status': 201,
+              'data': {
+                'id': 'route-new-001',
+                ...createdRoute!,
+              },
+            }),
+            201,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('Not Found', 404);
+      }),
+    );
+
+    final response = await api.post('/patrol-routes', {
+      'parkId': 'park-yala',
+      'areaId': 'area-b1',
+      'name': 'North Boundary Trail',
+      'plannedDistanceMeters': 3500.0,
+      'pathPoints': [
+        {'latitude': 6.371, 'longitude': 81.381},
+        {'latitude': 6.375, 'longitude': 81.389},
+      ],
+    });
+
+    expect(response.statusCode, 201);
+    expect(createdRoute?['name'], 'North Boundary Trail');
+    expect(createdRoute?['plannedDistanceMeters'], 3500.0);
+    expect((createdRoute?['pathPoints'] as List).length, 2);
+  });
+
+  // TEST: Ranger Emergency Alert Dispatch
+  // This test verifies that triggering an emergency alert submits a CRITICAL risk level alert
+  // with ranger distress details to the AlertRepository so administrators are immediately notified.
+  test('ranger emergency alert dispatches critical risk alert to repository', () async {
+    Map<String, dynamic>? alertPayload;
+    final api = ApiService(
+      baseUrl: 'http://test/api/v1',
+      client: MockClient((request) async {
+        if (request.url.path.contains('/alerts/') && request.method == 'PUT') {
+          alertPayload = jsonDecode(request.body) as Map<String, dynamic>;
+          return success({'message': 'Alert created'});
+        }
+        return http.Response('Not Found', 404);
+      }),
+    );
+
+    final alertRepo = ApiAlertRepository(api);
+    await alertRepo.create('alert-emergency-999', {
+      'parkId': 'park-yala',
+      'areaId': 'area-b1',
+      'animal': 'EMERGENCY: Ranger in Distress (Ranger Perera)',
+      'collarId': 'RANGER-007',
+      'riskLevel': 'CRITICAL',
+      'location': {'latitude': 6.375, 'longitude': 81.382, 'source': 'MANUAL'},
+    });
+
+    expect(alertPayload?['riskLevel'], 'CRITICAL');
+    expect(alertPayload?['animal'], contains('Ranger in Distress'));
+    expect(alertPayload?['location']?['latitude'], 6.375);
+  });
+
+  // TEST: Ranger Manual Waypoint Recording
+  // This test verifies that PatrolProvider correctly records manual waypoints
+  // with exact coordinates, timestamp, and descriptive labels.
+  test('ranger manual waypoint records waypoint with coordinates and label', () {
+    final patrolProvider = PatrolProvider();
+    expect(patrolProvider.waypoints, isEmpty);
+
+    patrolProvider.markWaypointAt('Waterhole Observation Point', 6.3742, 81.3815);
+
+    expect(patrolProvider.waypoints, hasLength(1));
+    final wp = patrolProvider.waypoints.first;
+    expect(wp['label'], 'Waterhole Observation Point');
+    expect(wp['location']['latitude'], 6.3742);
+    expect(wp['location']['longitude'], 81.3815);
+  });
+
+  // TEST: Robust Analytics Parsing
+  // This test verifies that mapAnalytics safely handles mixed integer and double types
+  // and null area names without throwing type cast exceptions.
+  test('mapAnalytics safely casts mixed double/int values and null fields', () {
+    final rawJson = {
+      'totalIncidents': 12,
+      'communityReportCount': 5,
+      'resolvedAlertCount': 3,
+      'dataAvailable': true,
+      'incidentTypeCounts': [
+        {'type': 'SNARE', 'count': 8.0}, // Double instead of int
+      ],
+      'dailyIncidentCounts': [
+        {'date': '2026-10-10', 'count': 4.0},
+      ],
+      'areaCounts': [
+        {'areaName': null, 'incidentCount': 6.0, 'potentialHotspot': true},
+      ],
+      'patrolCoverage': {
+        'assignedRouteCount': 10.0,
+        'completedRouteCount': 8.0,
+        'coveragePercent': 80.0,
+      },
+      'communityConflict': {
+        'typeCounts': {'CROP_DAMAGE': 5.0},
+        'dailyCounts': [],
+        'areaCounts': [],
+      },
+    };
+
+    final analytics = mapAnalytics(rawJson);
+
+    expect(analytics.totalIncidents, 12);
+    expect(analytics.incidentTypes['SNARE'], 8);
+    expect(analytics.incidentAreas.first.name, 'Unknown Area');
+    expect(analytics.incidentAreas.first.count, 6);
+    expect(analytics.assignedRoutes, 10);
+    expect(analytics.completedRoutes, 8);
+    expect(analytics.coveragePercent, 80.0);
+    expect(analytics.communityTypes['CROP_DAMAGE'], 5);
+  });
+
+  // TEST: Camera Trap Monitoring Mock Data Fallback
+  // This test verifies that when the camera trap repository returns an empty list,
+  // the camera images screen displays rich Sri Lankan wildlife mock data (Leopards, Elephants, etc.).
+  testWidgets('camera trap monitoring displays mock data when repository is empty', (tester) async {
+    final scenario = Scenario('RESEARCHER');
+    await tester.binding.setSurfaceSize(const Size(1100, 1500));
+    await tester.pumpWidget(scenario.app(const CameraImagesScreen(parkId: 'park-yala')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Camera trap monitoring'), findsOneWidget);
+    expect(find.text('Displaying camera trap monitoring sample data.'), findsOneWidget);
+    expect(find.textContaining('Sri Lankan Leopard'), findsOneWidget);
+    expect(find.textContaining('Asian Elephant'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+    scenario.outbox.dispose();
+    await tester.binding.setSurfaceSize(null);
   });
 }

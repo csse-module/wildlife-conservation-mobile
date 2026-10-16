@@ -4,10 +4,13 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:provider/provider.dart';
+import 'package:uuid/uuid.dart';
+import '../providers/auth_provider.dart';
 import '../providers/patrol_provider.dart';
 import '../utils/constants.dart';
 import '../features/operations/presentation/report_form_screen.dart';
 import '../features/operations/domain/models.dart';
+import '../features/operations/domain/repositories.dart';
 
 class ActivePatrolScreen extends StatefulWidget {
   final String assignmentId;
@@ -52,41 +55,103 @@ class _ActivePatrolScreenState extends State<ActivePatrolScreen> {
     }
   }
 
-  void _markWaypoint() async {
-    final position = await Geolocator.getCurrentPosition(locationSettings: const LocationSettings(accuracy: LocationAccuracy.high));
-    
+  Future<LatLng> _resolveCurrentLocation() async {
+    try {
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.always || permission == LocationPermission.whileInUse) {
+        final pos = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.high,
+            timeLimit: Duration(seconds: 4),
+          ),
+        );
+        return LatLng(pos.latitude, pos.longitude);
+      }
+    } catch (_) {}
+
+    try {
+      final lastPos = await Geolocator.getLastKnownPosition();
+      if (lastPos != null) {
+        return LatLng(lastPos.latitude, lastPos.longitude);
+      }
+    } catch (_) {}
+
+    final patrol = Provider.of<PatrolProvider>(context, listen: false);
+    if (patrol.actualPath.isNotEmpty) {
+      return patrol.actualPath.last;
+    }
+    if (widget.plannedRoute.isNotEmpty) {
+      return widget.plannedRoute.first;
+    }
+    return const LatLng(6.37, 81.38);
+  }
+
+  void _markWaypoint([LatLng? tappedLocation]) async {
+    final LatLng loc = tappedLocation ?? await _resolveCurrentLocation();
     if (!mounted) return;
 
-    // Simple dialog to get a label
-    String? label = await showDialog<String>(
+    final label = await showDialog<String>(
       context: context,
       builder: (context) {
         String input = '';
         return AlertDialog(
           title: const Text('Mark Waypoint'),
-          content: TextField(
-            onChanged: (val) => input = val,
-            decoration: const InputDecoration(hintText: "Enter waypoint label (e.g. Broken Fence)"),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Coordinates: ${loc.latitude.toStringAsFixed(4)}, ${loc.longitude.toStringAsFixed(4)}',
+                style: const TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                onChanged: (val) => input = val,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  hintText: "Enter waypoint label (e.g. Broken Fence, Waterhole)",
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-            TextButton(onPressed: () => Navigator.pop(context, input), child: const Text('Save')),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, input.trim()),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppConstants.primaryGreen,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Save'),
+            ),
           ],
         );
       },
     );
-    
+
     if (!mounted) return;
 
     if (label != null && label.isNotEmpty) {
-      Provider.of<PatrolProvider>(context, listen: false).markWaypoint(label, position);
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Waypoint marked!')));
+      Provider.of<PatrolProvider>(context, listen: false)
+          .markWaypointAt(label, loc.latitude, loc.longitude);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Waypoint "$label" marked successfully!'),
+          backgroundColor: AppConstants.primaryGreen,
+        ),
+      );
     }
   }
 
   void _reportSighting() async {
-    final position = await Geolocator.getCurrentPosition(locationSettings: const LocationSettings(accuracy: LocationAccuracy.high));
-    
+    final LatLng loc = await _resolveCurrentLocation();
     if (!mounted) return;
 
     String? sightingDetails = await showDialog<String>(
@@ -95,18 +160,29 @@ class _ActivePatrolScreenState extends State<ActivePatrolScreen> {
         String input = '';
         return AlertDialog(
           title: const Text('Report Sighting', style: TextStyle(color: AppConstants.primaryGreen)),
-          content: TextField(
-            onChanged: (val) => input = val,
-            maxLines: 3,
-            decoration: const InputDecoration(
-              hintText: "Enter sighting details (e.g., Elephant herd spotted)",
-              border: OutlineInputBorder(),
-            ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Coordinates: ${loc.latitude.toStringAsFixed(4)}, ${loc.longitude.toStringAsFixed(4)}',
+                style: const TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                onChanged: (val) => input = val,
+                maxLines: 3,
+                decoration: const InputDecoration(
+                  hintText: "Enter sighting details (e.g., Elephant herd spotted)",
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
           ),
           actions: [
             TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel', style: TextStyle(color: Colors.grey))),
             ElevatedButton(
-              onPressed: () => Navigator.pop(context, input),
+              onPressed: () => Navigator.pop(context, input.trim()),
               style: ElevatedButton.styleFrom(backgroundColor: AppConstants.primaryGreen, foregroundColor: Colors.white),
               child: const Text('Report'),
             ),
@@ -114,17 +190,91 @@ class _ActivePatrolScreenState extends State<ActivePatrolScreen> {
         );
       },
     );
-    
+
     if (!mounted) return;
 
     if (sightingDetails != null && sightingDetails.isNotEmpty) {
-      Provider.of<PatrolProvider>(context, listen: false).reportSighting(sightingDetails, position);
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sighting Reported Successfully!'), backgroundColor: AppConstants.primaryGreen));
+      Provider.of<PatrolProvider>(context, listen: false)
+          .reportSightingAt(sightingDetails, loc.latitude, loc.longitude);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Sighting Reported Successfully!'), backgroundColor: AppConstants.primaryGreen),
+      );
     }
   }
-  
-  void _emergencyAlert() {
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Emergency Alert Triggered!'), backgroundColor: Colors.red));
+
+  Future<void> _emergencyAlert() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.red, size: 28),
+            SizedBox(width: 8),
+            Text('Emergency Alert'),
+          ],
+        ),
+        content: const Text(
+          'Send an immediate high-priority emergency distress alert to the Park Manager and dashboard?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('DISPATCH ALERT'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true || !mounted) return;
+
+    final loc = await _resolveCurrentLocation();
+    final user = context.read<AuthProvider>().user;
+    final parkId = (user?.parkIds.isNotEmpty == true) ? user!.parkIds.first : 'park-yala';
+    final alertId = const Uuid().v4();
+    final now = DateTime.now().toUtc().toIso8601String();
+
+    final payload = <String, dynamic>{
+      'parkId': parkId,
+      'areaId': 'area-b1',
+      'animal': 'EMERGENCY: Ranger in Distress (${user?.name ?? 'Ranger'})',
+      'collarId': 'RANGER-${user?.id ?? 'DISTRESS'}',
+      'riskLevel': 'CRITICAL',
+      'location': {
+        'latitude': loc.latitude,
+        'longitude': loc.longitude,
+        'source': 'MANUAL',
+      },
+      'locationUpdatedAt': now,
+      'detectedAt': now,
+    };
+
+    try {
+      await context.read<AlertRepository>().create(alertId, payload);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Emergency Distress Alert Dispatched to Park Manager!'),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 4),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error dispatching alert: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   String _formatDuration(Duration duration) {
@@ -226,6 +376,7 @@ class _ActivePatrolScreenState extends State<ActivePatrolScreen> {
               options: MapOptions(
                 initialCenter: widget.plannedRoute.isNotEmpty ? widget.plannedRoute.first : const LatLng(7.8731, 80.7718),
                 initialZoom: 15,
+                onTap: (tapPosition, point) => _markWaypoint(point),
                 onMapReady: () {
                   if (mounted) {
                     setState(() {

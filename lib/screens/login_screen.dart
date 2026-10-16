@@ -6,6 +6,7 @@ import 'home_screen.dart';
 import 'registration_screen.dart';
 import 'change_password_screen.dart';
 import 'admin_login_screen.dart';
+import 'forgot_password_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -229,10 +230,10 @@ class _LoginScreenState extends State<LoginScreen> {
                   // Forgot Password Button
                   TextButton(
                     onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Password recovery is not enabled yet. Please contact your Park Manager for a temporary password.'),
-                          duration: Duration(seconds: 4),
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const ForgotPasswordScreen(),
                         ),
                       );
                     },

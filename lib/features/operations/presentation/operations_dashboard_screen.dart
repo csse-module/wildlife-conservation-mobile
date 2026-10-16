@@ -5,6 +5,7 @@ import '../../../providers/auth_provider.dart';
 import '../../../screens/add_park_screen.dart';
 import '../../../screens/add_staff_screen.dart';
 import '../../../screens/assign_patrol_screen.dart';
+import '../../../screens/admin_patrol_routes_screen.dart';
 import '../../../screens/change_password_screen.dart';
 import '../../../screens/login_screen.dart';
 import '../../../screens/my_patrols_screen.dart';
@@ -68,6 +69,10 @@ class _OperationsDashboardScreenState extends State<OperationsDashboardScreen>
         now.subtract(const Duration(days: 29)),
         now,
       );
+    } else if (role == 'COMMUNITY_MEMBER') {
+      _feed = null;
+      _pending = null;
+      _alerts = null;
     } else {
       _feed = context.read<FieldReportRepository>().list(
         ReportKind.community,
@@ -78,10 +83,16 @@ class _OperationsDashboardScreenState extends State<OperationsDashboardScreen>
         parkId: _parkId,
         status: 'SUBMITTED',
       );
-      if (role != 'COMMUNITY_MEMBER') {
-        _alerts = context.read<AlertRepository>().list(
-          parkId: _parkId,
-          status: 'NEW',
+      _alerts = context.read<AlertRepository>().list(
+        parkId: _parkId,
+        status: 'NEW',
+      );
+      if (role == 'PARK_MANAGER') {
+        final now = DateUtils.dateOnly(DateTime.now());
+        _analytics = context.read<ReportingRepository>().analytics(
+          _parkId!,
+          now.subtract(const Duration(days: 29)),
+          now,
         );
       }
     }
@@ -117,6 +128,7 @@ class _OperationsDashboardScreenState extends State<OperationsDashboardScreen>
       OperationAction.cameras => CameraImagesScreen(parkId: _parkId),
       OperationAction.addStaff => const AddStaffScreen(),
       OperationAction.addPark => const AddParkScreen(),
+      OperationAction.patrolRoutes => AdminPatrolRoutesScreen(parkId: _parkId),
       OperationAction.assignPatrol => const AssignPatrolScreen(),
       OperationAction.rangers => const RangersListScreen(),
       OperationAction.myPatrols => const MyPatrolsScreen(),
@@ -246,7 +258,9 @@ class _OperationsDashboardScreenState extends State<OperationsDashboardScreen>
                   ),
                 const SizedBox(height: 16),
                 const OutboxBanner(),
-                if (user.role != 'RESEARCHER' && _parkId != null)
+                if (user.role != 'RESEARCHER' &&
+                    user.role != 'COMMUNITY_MEMBER' &&
+                    _parkId != null)
                   Wrap(
                     spacing: 12,
                     runSpacing: 8,
@@ -321,9 +335,7 @@ class _OperationsDashboardScreenState extends State<OperationsDashboardScreen>
                   ),
                 ),
                 const SizedBox(height: 20),
-                if (_feed != null && user.role == 'COMMUNITY_MEMBER')
-                  _communityFeed(user.role),
-                if (user.role == 'RESEARCHER' && _analytics != null)
+                if ((user.role == 'RESEARCHER' || user.role == 'PARK_MANAGER') && _analytics != null)
                   FutureBuilder<ConservationAnalytics>(
                     future: _analytics,
                     builder: (context, data) {
@@ -336,10 +348,77 @@ class _OperationsDashboardScreenState extends State<OperationsDashboardScreen>
                       if (!data.hasData) {
                         return const Center(child: CircularProgressIndicator());
                       }
+                      final analytics = data.data!;
                       return SectionCard(
-                        title: 'Conservation overview · last 30 days',
-                        child: Text(
-                          '${data.data!.totalIncidents} incidents · ${data.data!.communityReportCount} community reports\nOpen Analytics & reports to explore trends and download a report.',
+                        title: user.role == 'PARK_MANAGER'
+                            ? 'Park operations overview · last 30 days'
+                            : 'Conservation overview · last 30 days',
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Text(
+                              '${analytics.totalIncidents} incidents · ${analytics.communityReportCount} community reports · ${analytics.resolvedAlertCount} alerts resolved',
+                              style: const TextStyle(fontWeight: FontWeight.w600),
+                            ),
+                            const SizedBox(height: 12),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text('Patrol Route Completion:'),
+                                Text(
+                                  analytics.coveragePercent != null
+                                      ? '${analytics.coveragePercent}%'
+                                      : '0%',
+                                  style: const TextStyle(fontWeight: FontWeight.bold),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(6),
+                              child: LinearProgressIndicator(
+                                value: analytics.assignedRoutes > 0
+                                    ? (analytics.completedRoutes / analytics.assignedRoutes).clamp(0.0, 1.0)
+                                    : 0.0,
+                                minHeight: 10,
+                                backgroundColor: Colors.grey.shade200,
+                                color: Colors.green,
+                              ),
+                            ),
+                            if (analytics.incidentTypes.isNotEmpty) ...[
+                              const SizedBox(height: 12),
+                              const Text('Incident Breakdown:', style: TextStyle(fontWeight: FontWeight.w600)),
+                              const SizedBox(height: 6),
+                              ...analytics.incidentTypes.entries.map((entry) {
+                                final maxVal = analytics.incidentTypes.values.fold<int>(1, (a, b) => b > a ? b : a);
+                                return Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 3.0),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                                    children: [
+                                      Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Text(readable(entry.key), style: const TextStyle(fontSize: 13)),
+                                          Text('${entry.value}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 2),
+                                      ClipRRect(
+                                        borderRadius: BorderRadius.circular(3),
+                                        child: LinearProgressIndicator(
+                                          value: entry.value / maxVal,
+                                          minHeight: 6,
+                                          backgroundColor: Colors.grey.shade200,
+                                          color: Colors.green,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              }),
+                            ],
+                          ],
                         ),
                       );
                     },
@@ -478,6 +557,11 @@ class _OperationsDashboardScreenState extends State<OperationsDashboardScreen>
       icon: Icons.park_outlined,
       title: 'Add park',
       subtitle: 'Configure a park and its areas',
+    ),
+    OperationAction.patrolRoutes => (
+      icon: Icons.alt_route,
+      title: 'Patrol routes',
+      subtitle: 'Create and map patrol routes for parks',
     ),
     OperationAction.assignPatrol => (
       icon: Icons.route_outlined,

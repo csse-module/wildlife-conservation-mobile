@@ -189,32 +189,35 @@ ConservationAnalytics mapAnalytics(Json json) {
   final coverage = json['patrolCoverage'] as Json? ?? {};
   final conflict = json['communityConflict'] as Json? ?? {};
   List<DailyStatistic> days(dynamic value) => _rows(value ?? [])
-      .map((row) => DailyStatistic(_date(row['date']), row['count'] as int))
+      .map((row) => DailyStatistic(_date(row['date']), (row['count'] as num).toInt()))
       .toList();
   List<AreaStatistic> areas(dynamic value, String count) => _rows(value ?? [])
       .map(
         (row) => AreaStatistic(
-          row['areaName'] as String,
-          row[count] as int,
+          row['areaName'] as String? ?? 'Unknown Area',
+          (row[count] as num?)?.toInt() ?? 0,
           hotspot: row['potentialHotspot'] == true,
         ),
       )
       .toList();
   return ConservationAnalytics(
-    totalIncidents: json['totalIncidents'] as int,
-    communityReportCount: json['communityReportCount'] as int,
-    resolvedAlertCount: json['resolvedAlertCount'] as int,
+    totalIncidents: (json['totalIncidents'] as num?)?.toInt() ?? 0,
+    communityReportCount: (json['communityReportCount'] as num?)?.toInt() ?? 0,
+    resolvedAlertCount: (json['resolvedAlertCount'] as num?)?.toInt() ?? 0,
     incidentTypes: {
       for (final row in _rows(json['incidentTypeCounts'] ?? []))
-        row['type'] as String: row['count'] as int,
+        row['type'] as String: (row['count'] as num).toInt(),
     },
-    communityTypes: Map<String, int>.from(conflict['typeCounts'] as Map? ?? {}),
+    communityTypes: {
+      for (final entry in (conflict['typeCounts'] as Map? ?? {}).entries)
+        entry.key.toString(): (entry.value as num).toInt(),
+    },
     incidentDays: days(json['dailyIncidentCounts']),
     communityDays: days(conflict['dailyCounts']),
     incidentAreas: areas(json['areaCounts'], 'incidentCount'),
     communityAreas: areas(conflict['areaCounts'], 'reportCount'),
-    assignedRoutes: coverage['assignedRouteCount'] as int? ?? 0,
-    completedRoutes: coverage['completedRouteCount'] as int? ?? 0,
+    assignedRoutes: (coverage['assignedRouteCount'] as num?)?.toInt() ?? 0,
+    completedRoutes: (coverage['completedRouteCount'] as num?)?.toInt() ?? 0,
     coveragePercent: (coverage['coveragePercent'] as num?)?.toDouble(),
     dataAvailable: json['dataAvailable'] == true,
   );

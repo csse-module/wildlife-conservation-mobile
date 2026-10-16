@@ -218,8 +218,9 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
 
                   // Select Park Dropdown
                   DropdownButtonFormField<String>(
-                    key: ValueKey(_selectedParkId),
-                    initialValue: _selectedParkId,
+                    value: _availableParks.any((park) => park['id'] == _selectedParkId)
+                        ? _selectedParkId
+                        : null,
                     decoration: InputDecoration(
                       labelText: 'Community Park',
                       prefixIcon: const Icon(

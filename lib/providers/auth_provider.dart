@@ -43,6 +43,14 @@ class AuthProvider extends ChangeNotifier {
     });
   });
 
+  Future<bool> resetPassword(String email, String newPassword) =>
+      _run(() async {
+        await _api.postData('/auth/reset-password', {
+          'email': email.trim(),
+          'newPassword': newPassword,
+        });
+      });
+
   Future<bool> changePassword(String currentPassword, String newPassword) =>
       _run(() async {
         await _api.postData('/auth/change-password', {

@@ -19,6 +19,59 @@ class _CameraImagesScreenState extends State<CameraImagesScreen> {
   Future<ResultPage<CameraImage>>? _images;
   String? _parkId, _status;
   int _page = 0;
+
+  static final List<CameraImage> _mockImages = [
+    CameraImage(
+      id: 'mock-cam-001',
+      cameraTrapId: 'TRAP-YALA-B1-04',
+      mediaId: 'mock-media-001',
+      capturedAt: DateTime.now().subtract(const Duration(hours: 3)),
+      status: 'PENDING_REVIEW',
+      species: 'Sri Lankan Leopard (Panthera pardus kotiya)',
+      possiblePoacher: false,
+      notes: 'Solitary adult leopard moving towards the waterhole.',
+    ),
+    CameraImage(
+      id: 'mock-cam-002',
+      cameraTrapId: 'TRAP-YALA-B2-01',
+      mediaId: 'mock-media-002',
+      capturedAt: DateTime.now().subtract(const Duration(hours: 7)),
+      status: 'PENDING_REVIEW',
+      species: 'Asian Elephant (Elephas maximus)',
+      possiblePoacher: false,
+      notes: 'Elephant herd observed near agricultural buffer boundary.',
+    ),
+    CameraImage(
+      id: 'mock-cam-003',
+      cameraTrapId: 'TRAP-WILP-A1-09',
+      mediaId: 'mock-media-003',
+      capturedAt: DateTime.now().subtract(const Duration(days: 1, hours: 2)),
+      status: 'PENDING_REVIEW',
+      species: 'Unauthorized Human Movement',
+      possiblePoacher: true,
+      notes: 'Night movement detected carrying suspected snare wire.',
+    ),
+    CameraImage(
+      id: 'mock-cam-004',
+      cameraTrapId: 'TRAP-YALA-B1-02',
+      mediaId: 'mock-media-004',
+      capturedAt: DateTime.now().subtract(const Duration(days: 1, hours: 8)),
+      status: 'REVIEWED',
+      species: 'Sri Lankan Sloth Bear (Melursus ursinus)',
+      possiblePoacher: false,
+      notes: 'Foraging along rocky outcrop, healthy adult.',
+    ),
+    CameraImage(
+      id: 'mock-cam-005',
+      cameraTrapId: 'TRAP-UDAW-C1-03',
+      mediaId: 'mock-media-005',
+      capturedAt: DateTime.now().subtract(const Duration(days: 2)),
+      status: 'REVIEWED',
+      species: 'Chital / Spotted Deer (Axis axis)',
+      possiblePoacher: false,
+      notes: 'Herd grazing in open grassland.',
+    ),
+  ];
   @override
   void initState() {
     super.initState();
@@ -147,17 +200,55 @@ class _CameraImagesScreenState extends State<CameraImagesScreen> {
                     return const Center(child: CircularProgressIndicator());
                   }
                   final data = snapshot.data!;
+                  final mockFiltered = _mockImages
+                      .where((img) => _status == null || img.status == _status)
+                      .toList();
+                  final displayedItems =
+                      data.items.isNotEmpty ? data.items : mockFiltered;
                   return ListView(
                     padding: const EdgeInsets.fromLTRB(12, 0, 12, 88),
                     children: [
-                      if (data.items.isEmpty)
+                      if (data.items.isEmpty && mockFiltered.isNotEmpty)
+                        Container(
+                          margin: const EdgeInsets.symmetric(vertical: 8),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.green.shade50,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.green.shade200),
+                          ),
+                          child: const Row(
+                            children: [
+                              Icon(
+                                Icons.info_outline,
+                                size: 18,
+                                color: Colors.green,
+                              ),
+                              SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Displaying camera trap monitoring sample data.',
+                                  style: TextStyle(
+                                    color: Colors.green,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      if (displayedItems.isEmpty)
                         const Padding(
                           padding: EdgeInsets.all(24),
                           child: Text(
                             'No camera images found for this selection.',
                           ),
                         ),
-                      ...data.items.map(
+                      ...displayedItems.map(
                         (image) => Card(
                           child: ListTile(
                             leading: Icon(
@@ -256,7 +347,9 @@ class _CameraReviewScreenState extends State<CameraReviewScreen> {
     _species = TextEditingController(text: _image.species ?? 'Unknown');
     _notes = TextEditingController(text: _image.notes ?? '');
     _poacher = _image.possiblePoacher ?? false;
-    _photo = context.read<CameraRepository>().photo(_image.mediaId);
+    _photo = _image.mediaId.startsWith('mock-')
+        ? Future.value(Uint8List(0))
+        : context.read<CameraRepository>().photo(_image.mediaId);
   }
 
   @override
@@ -268,6 +361,23 @@ class _CameraReviewScreenState extends State<CameraReviewScreen> {
 
   Future<void> _review() async {
     if (!_form.currentState!.validate()) return;
+    if (_image.id.startsWith('mock-')) {
+      final updated = CameraImage(
+        id: _image.id,
+        cameraTrapId: _image.cameraTrapId,
+        mediaId: _image.mediaId,
+        capturedAt: _image.capturedAt,
+        status: 'REVIEWED',
+        species: _species.text.trim(),
+        possiblePoacher: _poacher,
+        notes: _notes.text.trim(),
+      );
+      if (mounted) {
+        setState(() => _image = updated);
+        showOperationMessage(context, 'Camera image review saved.');
+      }
+      return;
+    }
     setState(() => _busy = true);
     try {
       final updated = await context.read<CameraRepository>().review(

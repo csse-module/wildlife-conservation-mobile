@@ -43,7 +43,8 @@ class ApiService {
       'X-Request-ID': const Uuid().v4(),
       if (token != null &&
           endpoint != '/auth/login' &&
-          endpoint != '/auth/register')
+          endpoint != '/auth/register' &&
+          endpoint != '/auth/reset-password')
         'Authorization': 'Bearer $token',
     };
 

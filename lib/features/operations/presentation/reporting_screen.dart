@@ -353,8 +353,33 @@ class AnalyticsView extends StatelessWidget {
       ),
       SectionCard(
         title: 'Patrol coverage',
-        child: Text(
-          '${data.completedRoutes} of ${data.assignedRoutes} assigned routes completed.\nCoverage measures route completion, not geographic area.',
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              '${data.completedRoutes} of ${data.assignedRoutes} assigned routes completed.\nCoverage measures route completion, not geographic area.',
+            ),
+            const SizedBox(height: 12),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: LinearProgressIndicator(
+                value: data.assignedRoutes > 0
+                    ? (data.completedRoutes / data.assignedRoutes).clamp(0.0, 1.0)
+                    : 0.0,
+                minHeight: 14,
+                backgroundColor: Colors.grey.shade200,
+                color: Colors.green,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              data.coveragePercent != null
+                  ? '${data.coveragePercent}% Route Completion'
+                  : '0% Route Completion',
+              textAlign: TextAlign.end,
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+            ),
+          ],
         ),
       ),
       SectionCard(
@@ -405,19 +430,40 @@ class AnalyticsView extends StatelessWidget {
       ),
     ),
   );
-  Widget _counts(Map<String, int> counts) => counts.isEmpty
-      ? const Text('No records in this period.')
-      : Column(
-          children: counts.entries
-              .map(
-                (row) => ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(readable(row.key)),
-                  trailing: Text('${row.value}'),
+  Widget _counts(Map<String, int> counts) {
+    if (counts.isEmpty) return const Text('No records in this period.');
+    final max = counts.values.fold<int>(1, (a, b) => b > a ? b : a);
+    return Column(
+      children: counts.entries.map((row) {
+        final ratio = row.value / max;
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(readable(row.key), style: const TextStyle(fontWeight: FontWeight.w600)),
+                  Text('${row.value}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                ],
+              ),
+              const SizedBox(height: 4),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: ratio,
+                  minHeight: 8,
+                  backgroundColor: Colors.grey.shade200,
+                  color: Colors.green,
                 ),
-              )
-              .toList(),
+              ),
+            ],
+          ),
         );
+      }).toList(),
+    );
+  }
   Widget _trend(String label, List<DailyStatistic> days) {
     final active = days.where((day) => day.count > 0).toList();
     final max = active.fold<int>(
