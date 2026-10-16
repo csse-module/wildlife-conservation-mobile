@@ -1,25 +1,23 @@
 import 'dart:async';
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:uuid/uuid.dart';
 import 'package:provider/provider.dart';
 import '../providers/patrol_provider.dart';
-import '../services/api_service.dart';
-import '../services/db_helper.dart';
 import '../utils/constants.dart';
+import '../features/operations/presentation/report_form_screen.dart';
+import '../features/operations/domain/models.dart';
 
 class ActivePatrolScreen extends StatefulWidget {
   final String assignmentId;
   final List<LatLng> plannedRoute;
 
   const ActivePatrolScreen({
-    Key? key, 
+    super.key, 
     required this.assignmentId, 
     required this.plannedRoute
-  }) : super(key: key);
+  });
 
   @override
   State<ActivePatrolScreen> createState() => _ActivePatrolScreenState();
@@ -27,6 +25,7 @@ class ActivePatrolScreen extends StatefulWidget {
 
 class _ActivePatrolScreenState extends State<ActivePatrolScreen> {
   bool _isLoading = false;
+  bool _isMapReady = false;
   final MapController _mapController = MapController();
 
   @override
@@ -54,10 +53,10 @@ class _ActivePatrolScreenState extends State<ActivePatrolScreen> {
   }
 
   void _markWaypoint() async {
-    final position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
-
-    final String waypointId = const Uuid().v4().toLowerCase();
+    final position = await Geolocator.getCurrentPosition(locationSettings: const LocationSettings(accuracy: LocationAccuracy.high));
     
+    if (!mounted) return;
+
     // Simple dialog to get a label
     String? label = await showDialog<String>(
       context: context,
@@ -77,6 +76,8 @@ class _ActivePatrolScreenState extends State<ActivePatrolScreen> {
       },
     );
     
+    if (!mounted) return;
+
     if (label != null && label.isNotEmpty) {
       Provider.of<PatrolProvider>(context, listen: false).markWaypoint(label, position);
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Waypoint marked!')));
@@ -84,9 +85,10 @@ class _ActivePatrolScreenState extends State<ActivePatrolScreen> {
   }
 
   void _reportSighting() async {
-    final position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
-    final String observationId = const Uuid().v4().toLowerCase();
+    final position = await Geolocator.getCurrentPosition(locationSettings: const LocationSettings(accuracy: LocationAccuracy.high));
     
+    if (!mounted) return;
+
     String? sightingDetails = await showDialog<String>(
       context: context,
       builder: (context) {
@@ -113,6 +115,8 @@ class _ActivePatrolScreenState extends State<ActivePatrolScreen> {
       },
     );
     
+    if (!mounted) return;
+
     if (sightingDetails != null && sightingDetails.isNotEmpty) {
       Provider.of<PatrolProvider>(context, listen: false).reportSighting(sightingDetails, position);
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sighting Reported Successfully!'), backgroundColor: AppConstants.primaryGreen));
@@ -134,10 +138,14 @@ class _ActivePatrolScreenState extends State<ActivePatrolScreen> {
   Widget build(BuildContext context) {
     return Consumer<PatrolProvider>(
       builder: (context, patrol, child) {
-        if (patrol.actualPath.isNotEmpty) {
+        if (patrol.actualPath.isNotEmpty && _isMapReady) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) {
-              _mapController.move(patrol.actualPath.last, 16.0);
+              try {
+                _mapController.move(patrol.actualPath.last, 16.0);
+              } catch (e) {
+                // Ignore map controller not ready exceptions
+              }
             }
           });
         }
@@ -149,13 +157,27 @@ class _ActivePatrolScreenState extends State<ActivePatrolScreen> {
         foregroundColor: Colors.black,
         elevation: 1,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.add_location_alt, color: AppConstants.primaryGreen),
+            tooltip: 'Report Incident',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const ReportFormScreen(
+                    kind: ReportKind.incident,
+                  ),
+                ),
+              );
+            },
+          ),
           Padding(
             padding: const EdgeInsets.only(right: 16.0),
             child: Center(
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: Colors.green.withOpacity(0.2),
+                  color: Colors.green.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Row(
@@ -204,6 +226,13 @@ class _ActivePatrolScreenState extends State<ActivePatrolScreen> {
               options: MapOptions(
                 initialCenter: widget.plannedRoute.isNotEmpty ? widget.plannedRoute.first : const LatLng(7.8731, 80.7718),
                 initialZoom: 15,
+                onMapReady: () {
+                  if (mounted) {
+                    setState(() {
+                      _isMapReady = true;
+                    });
+                  }
+                },
               ),
               children: [
                 TileLayer(

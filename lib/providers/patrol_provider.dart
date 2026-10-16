@@ -18,10 +18,10 @@ class PatrolProvider with ChangeNotifier {
   Duration _elapsedTime = Duration.zero;
   double _coveredDistanceKm = 0.0;
   
-  List<LatLng> _actualPath = [];
-  List<Map<String, dynamic>> _trackPoints = [];
-  List<Map<String, dynamic>> _waypoints = [];
-  List<Map<String, dynamic>> _observations = [];
+  final List<LatLng> _actualPath = [];
+  final List<Map<String, dynamic>> _trackPoints = [];
+  final List<Map<String, dynamic>> _waypoints = [];
+  final List<Map<String, dynamic>> _observations = [];
   
   StreamSubscription<Position>? _positionStreamSubscription;
 
