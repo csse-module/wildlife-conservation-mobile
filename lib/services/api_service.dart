@@ -19,19 +19,31 @@ class ApiService {
 
   static String? customBaseUrl;
 
+  static String cleanUrl(String url) {
+    var trimmed = url.trim();
+    while (trimmed.endsWith('/')) {
+      trimmed = trimmed.substring(0, trimmed.length - 1);
+    }
+    if (!trimmed.endsWith('/api/v1')) {
+      trimmed = '$trimmed/api/v1';
+    }
+    return trimmed;
+  }
+
   static List<String> get candidateUrls => [
+        AppConstants.hostedRenderBaseUrl,
         AppConstants.usbDebugBaseUrl,
         AppConstants.currentLanBaseUrl,
+        AppConstants.lanDeployedBaseUrl,
         AppConstants.localBaseUrl,
         AppConstants.localhostBaseUrl,
-        AppConstants.deployedBaseUrl,
       ];
 
   static Future<void> initCustomBaseUrl([http.Client? probeClient]) async {
     final prefs = await SharedPreferences.getInstance();
     final saved = prefs.getString('custom_base_url');
     if (saved != null && saved.isNotEmpty) {
-      customBaseUrl = saved;
+      customBaseUrl = cleanUrl(saved);
       return;
     }
 
@@ -42,7 +54,7 @@ class ApiService {
         try {
           final res = await client
               .get(Uri.parse('$candidate/auth/registration-parks'))
-              .timeout(const Duration(milliseconds: 1500));
+              .timeout(const Duration(milliseconds: 2500));
           if (res.statusCode >= 200 && res.statusCode < 500) {
             customBaseUrl = candidate;
             break;
@@ -59,7 +71,7 @@ class ApiService {
   }
 
   static Future<void> setCustomBaseUrl(String url) async {
-    customBaseUrl = url.trim();
+    customBaseUrl = cleanUrl(url);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('custom_base_url', customBaseUrl!);
   }
@@ -72,7 +84,7 @@ class ApiService {
       try {
         final res = await _client
             .get(Uri.parse('$candidate/auth/registration-parks'))
-            .timeout(const Duration(milliseconds: 1500));
+            .timeout(const Duration(milliseconds: 2500));
         if (res.statusCode >= 200 && res.statusCode < 500) {
           return candidate;
         }
@@ -84,11 +96,12 @@ class ApiService {
   }
 
   Future<bool> testConnection([String? targetUrl]) async {
-    final target = targetUrl?.trim() ?? baseUrl;
+    final rawTarget = targetUrl?.trim() ?? baseUrl;
+    final target = cleanUrl(rawTarget);
     try {
       final response = await _client
           .get(Uri.parse('$target/auth/registration-parks'))
-          .timeout(const Duration(seconds: 4));
+          .timeout(const Duration(seconds: 15));
       return response.statusCode >= 200 && response.statusCode < 500;
     } catch (_) {
       return false;
