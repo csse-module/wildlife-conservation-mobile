@@ -107,6 +107,11 @@ class _ServerConfigDialogState extends State<ServerConfigDialog> {
               runSpacing: 6,
               children: [
                 ActionChip(
+                  avatar: const Icon(Icons.cloud_done, size: 16),
+                  label: const Text('Render Cloud', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  onPressed: () => _selectPreset(AppConstants.hostedRenderBaseUrl),
+                ),
+                ActionChip(
                   avatar: const Icon(Icons.usb, size: 16),
                   label: const Text('USB Debugging', style: TextStyle(fontSize: 12)),
                   onPressed: () => _selectPreset(AppConstants.usbDebugBaseUrl),
@@ -117,9 +122,9 @@ class _ServerConfigDialogState extends State<ServerConfigDialog> {
                   onPressed: () => _selectPreset(AppConstants.currentLanBaseUrl),
                 ),
                 ActionChip(
-                  avatar: const Icon(Icons.cloud_outlined, size: 16),
-                  label: const Text('Deployed (192.168.8.102)', style: TextStyle(fontSize: 12)),
-                  onPressed: () => _selectPreset(AppConstants.deployedBaseUrl),
+                  avatar: const Icon(Icons.dns, size: 16),
+                  label: const Text('LAN (192.168.8.102)', style: TextStyle(fontSize: 12)),
+                  onPressed: () => _selectPreset(AppConstants.lanDeployedBaseUrl),
                 ),
                 ActionChip(
                   avatar: const Icon(Icons.phone_android, size: 16),
@@ -135,7 +140,7 @@ class _ServerConfigDialogState extends State<ServerConfigDialog> {
               controller: _urlController,
               decoration: const InputDecoration(
                 labelText: 'Backend Base URL',
-                hintText: 'http://127.0.0.1:8080/api/v1',
+                hintText: 'https://wildlife-conservation-backend-5nkw.onrender.com',
                 border: OutlineInputBorder(),
                 prefixIcon: Icon(Icons.link, color: AppConstants.primaryGreen),
               ),
