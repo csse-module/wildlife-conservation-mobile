@@ -65,7 +65,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Wildlife Conservation',
+      title: 'Wild Guard',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         primaryColor: AppConstants.primaryGreen,

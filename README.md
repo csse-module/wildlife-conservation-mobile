@@ -1,4 +1,4 @@
-# WildGuard mobile
+# Wild Guard mobile
 
 Flutter frontend for the wildlife conservation Spring Boot backend.
 
@@ -6,10 +6,10 @@ Flutter frontend for the wildlife conservation Spring Boot backend.
 
 ```powershell
 flutter pub get
-flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8080/api/v1
+flutter run
 ```
 
-Use the emulator address above for Android, localhost for a browser on the backend computer, or the computer's LAN IP for a physical phone. Include `/api/v1` with no trailing slash. The current default LAN address is `http://192.168.1.21:8080/api/v1`; override it at build/run time when the network changes. No frontend `.env` or Supabase setup is needed for the connected reporting features.
+The default API URL is `https://wildlife-conservation-backend-5nkw.onrender.com/api/v1`. Override `API_BASE_URL` at build/run time to use another backend. For a local backend, use `http://10.0.2.2:8080/api/v1` for an Android emulator, localhost for a browser on the backend computer, or the computer's LAN IP for a physical phone. Include `/api/v1` with no trailing slash. No frontend `.env` or Supabase setup is needed for the connected reporting features.
 
 For browser development:
 
@@ -18,6 +18,24 @@ flutter run -d chrome --web-hostname localhost --web-port 5173 --dart-define=API
 ```
 
 Set backend `CORS_ALLOWED_ORIGINS=http://localhost:5173` before starting it. A debug APK can be built with `flutter build apk --debug --dart-define=API_BASE_URL=http://YOUR_COMPUTER_IP:8080/api/v1`.
+
+## Build an Android APK
+
+```powershell
+flutter build apk --release --dart-define=API_BASE_URL=https://wildlife-conservation-backend-5nkw.onrender.com/api/v1
+```
+
+The APK is generated at `build/app/outputs/flutter-apk/app-release.apk`. The project currently signs release builds with its existing debug key, which supports direct installation for testing. The API URL is compiled into the APK, so rebuild it when changing the backend address.
+
+## Android branding
+
+The Android launcher label and Flutter app titles use **Wild Guard**. The supplied logo is saved at `assets/branding/wild-guard-source.jpeg`; the splash and login screens use `assets/images/logo.png`. Regenerate the PNG logo and Android launcher icons after replacing the source image:
+
+```powershell
+./tools/update-android-branding.ps1
+```
+
+The script fits the original image into square PNGs without stretching it and produces all five Android launcher icon densities. Rebuild the APK to include branding changes.
 
 ## Roles and screens
 
@@ -62,6 +80,7 @@ The installed Windows `flutter.bat` launcher currently fails before invoking Flu
 ./tools/flutter-local.ps1 test
 ./tools/flutter-local.ps1 run -d chrome --web-hostname localhost --web-port 5173 --dart-define=API_BASE_URL=http://localhost:8080/api/v1
 ./tools/flutter-local.ps1 -AndroidDebug -ApiBaseUrl http://192.168.1.21:8080/api/v1
+./tools/flutter-local.ps1 -AndroidRelease -ApiBaseUrl https://wildlife-conservation-backend-5nkw.onrender.com/api/v1
 ```
 
-The Android option performs a debug build using cached dependencies and a temporary Gradle launcher under ignored `.dart_tool`. It also corrects a local `JAVA_HOME` ending in `bin` for that process. Standard Flutter commands remain appropriate on a working SDK installation.
+The Android options perform debug or release builds using cached dependencies and a temporary Gradle launcher under ignored `.dart_tool`. They also correct a local `JAVA_HOME` ending in `bin` for that process. Standard Flutter commands remain appropriate on a working SDK installation.
